@@ -1,0 +1,763 @@
+'use client';
+
+import { motion } from 'framer-motion';
+import Link from 'next/link';
+import Image from 'next/image';
+import {
+  CheckCircle,
+  Clock,
+  FileText,
+  TrendingUp,
+  User,
+  ExternalLink,
+  Download,
+  Link as LinkIcon,
+  X,
+  LogOut,
+  Settings,
+  Bell,
+  Lock,
+} from 'lucide-react';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { AnnouncementPopup } from './AnnouncementPopup';
+
+const allowedProcedures = [
+  {
+    id: 1,
+    name: "Leopold's Maneuver",
+    category: 'Clinical Procedure',
+    allowedBy: 'Dr. Sarah Mitchell',
+    allowedDate: 'April 5, 2026',
+    status: 'evaluated',
+    completedDate: 'April 10, 2026',
+    notes:
+      'Excellent technique demonstrated. Correct identification of fetal position and presentation.',
+    evaluation: {
+      overallScore: 95,
+      maxScore: 100,
+      competencyStatus: 'Competent',
+      evaluationDate: 'April 11, 2026',
+      evaluatorName: 'Dr. Sarah Mitchell',
+      feedback:
+        'Outstanding performance. Your technique was precise and you demonstrated excellent understanding of fetal positioning. Continue to maintain this level of proficiency in future clinical procedures.',
+      rubric: [
+        {
+          criterion: 'Preparation & Setup',
+          score: 24,
+          maxScore: 24,
+          description: 'Proper hand hygiene, positioning, and patient explanation',
+        },
+        {
+          criterion: 'Procedural Accuracy',
+          score: 35,
+          maxScore: 40,
+          description: 'Correct execution of all four Leopold maneuvers',
+        },
+        {
+          criterion: 'Safety & Comfort',
+          score: 20,
+          maxScore: 20,
+          description: 'Patient safety and comfort maintained throughout',
+        },
+        {
+          criterion: 'Communication',
+          score: 16,
+          maxScore: 16,
+          description: 'Clear communication with patient and documentation',
+        },
+      ],
+    },
+    resources: [
+      { type: 'file' as const, name: "Leopold's Maneuver Guide.pdf", url: '#' },
+      { type: 'link' as const, name: 'Video Tutorial', url: '#' },
+    ],
+  },
+  {
+    id: 2,
+    name: 'EINC',
+    category: 'Newborn Care',
+    allowedBy: 'Dr. Sarah Mitchell',
+    allowedDate: 'April 11, 2026',
+    status: 'completed',
+    completedDate: 'April 13, 2026',
+    notes:
+      'Successfully implemented Early and Immediate Newborn Care protocol. Good understanding of skin-to-skin contact importance.',
+    evaluation: null,
+    resources: [{ type: 'file' as const, name: 'EINC Protocol Guidelines.pdf', url: '#' }],
+  },
+  {
+    id: 3,
+    name: 'Labor and Delivery',
+    category: 'Clinical Procedure',
+    allowedBy: 'Prof. Jennifer Lopez',
+    allowedDate: 'April 14, 2026',
+    status: 'pending',
+    completedDate: null,
+    notes:
+      'Cleared to assist in labor and delivery. Must be under direct supervision of clinical instructor.',
+    evaluation: null,
+    resources: [
+      { type: 'file' as const, name: 'Labor and Delivery Procedures.pdf', url: '#' },
+      { type: 'link' as const, name: 'Stages of Labor Reference', url: '#' },
+    ],
+  },
+  {
+    id: 4,
+    name: 'Intramuscular Injection',
+    category: 'Medication Administration',
+    allowedBy: 'Dr. Sarah Mitchell',
+    allowedDate: null,
+    status: 'locked',
+    completedDate: null,
+    notes: 'Complete Labor and Delivery to unlock this procedure.',
+    evaluation: null,
+    resources: [],
+  },
+  {
+    id: 5,
+    name: 'Intradermal Injection',
+    category: 'Medication Administration',
+    allowedBy: 'Dr. Sarah Mitchell',
+    allowedDate: null,
+    status: 'locked',
+    completedDate: null,
+    notes: 'Complete Intramuscular Injection to unlock this procedure.',
+    evaluation: null,
+    resources: [],
+  },
+  {
+    id: 6,
+    name: 'NICU',
+    category: 'Specialized Care',
+    allowedBy: 'Dr. Maria Santos',
+    allowedDate: null,
+    status: 'locked',
+    completedDate: null,
+    notes: 'Complete Intradermal Injection to unlock this procedure.',
+    evaluation: null,
+    resources: [],
+  },
+];
+
+const stats = [
+  {
+    label: 'Total Procedures Allowed',
+    value: '3',
+    icon: CheckCircle,
+    color: 'var(--brand-green-dark)',
+  },
+  { label: 'Evaluated', value: '1', icon: CheckCircle, color: 'var(--brand-green-medium)' },
+  { label: 'In Progress', value: '2', icon: Clock, color: 'var(--brand-pink-dark)' },
+];
+
+const announcements = [
+  {
+    id: 1,
+    title: 'New Clinical Modules Available',
+    instructor: 'Dr. Sarah Mitchell',
+    role: 'Clinical Instructor',
+    date: 'April 12, 2026',
+    content:
+      'Exciting news! We have just released new clinical modules focusing on postpartum care and neonatal assessment.',
+    category: 'Academic',
+  },
+  {
+    id: 2,
+    title: 'Clinical Rotation Schedule Update',
+    instructor: 'Prof. Jennifer Lopez',
+    role: 'Lead Clinical Coordinator',
+    date: 'April 10, 2026',
+    content:
+      'Please note that the clinical rotation schedule for Week 6 has been updated. All students assigned to Labor & Delivery should report to the 3rd floor nurse station at 6:45 AM instead of 7:00 AM.',
+    category: 'Schedule',
+  },
+  {
+    id: 3,
+    title: 'Competency Assessment Reminder',
+    instructor: 'Dr. Maria Santos',
+    role: 'Clinical Instructor',
+    date: 'April 8, 2026',
+    content:
+      'Reminder: All students must complete their mid-term competency assessments by April 20th.',
+    category: 'Assessment',
+  },
+];
+
+const categoryColors: Record<string, string> = {
+  Academic: 'var(--brand-green-dark)',
+  Schedule: 'var(--brand-pink-dark)',
+  Assessment: 'var(--brand-green-medium)',
+  Event: 'var(--brand-pink-medium)',
+  Policy: 'var(--brand-green-dark)',
+};
+
+type Procedure = (typeof allowedProcedures)[0];
+
+export function StudentDashboard() {
+  const router = useRouter();
+  const [selectedProcedure, setSelectedProcedure] = useState<Procedure | null>(null);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showAnnouncements, setShowAnnouncements] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-background">
+      <AnnouncementPopup onViewAll={() => setShowAnnouncements(true)} />
+
+      {/* Dashboard Header */}
+      <header className="bg-white border-b border-border sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link href="/student/dashboard" className="flex items-center gap-3">
+            <Image src="/images/LOGO-removebg-preview.png" alt="Maternix Track" width={120} height={48} className="h-12 w-auto" />
+          </Link>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowAnnouncements(!showAnnouncements)}
+              className="hidden md:flex items-center gap-2 px-4 py-2 rounded-lg transition-all hover:scale-105"
+              style={{ backgroundColor: showAnnouncements ? '#d4edda' : 'var(--brand-pink-light)' }}
+            >
+              {showAnnouncements ? (
+                <>
+                  <FileText className="w-4 h-4" style={{ color: 'var(--brand-green-dark)' }} />
+                  <span className="text-sm text-foreground">View Procedures</span>
+                </>
+              ) : (
+                <>
+                  <Bell className="w-4 h-4" style={{ color: 'var(--brand-pink-dark)' }} />
+                  <span className="text-sm text-foreground">Announcements</span>
+                </>
+              )}
+            </button>
+
+            <div className="relative">
+              <button
+                onClick={() => setShowProfileMenu(!showProfileMenu)}
+                className="flex items-center gap-3 px-4 py-2 rounded-lg transition-all hover:shadow-md"
+                style={{ backgroundColor: 'var(--brand-pink-light)' }}
+              >
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: 'var(--brand-pink-dark)' }}
+                >
+                  <User className="w-4 h-4 text-white" />
+                </div>
+                <div className="text-sm">
+                  <div className="font-medium text-foreground">Emily Rodriguez</div>
+                  <div className="text-muted-foreground text-xs">Nursing Student</div>
+                </div>
+              </button>
+
+              {showProfileMenu && (
+                <div className="absolute right-0 mt-2 w-56 bg-white border border-border rounded-lg shadow-lg overflow-hidden z-50">
+                  <Link
+                    href="/student/profile"
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                    onClick={() => setShowProfileMenu(false)}
+                  >
+                    <Settings className="w-4 h-4" style={{ color: 'var(--brand-green-dark)' }} />
+                    <span className="text-foreground">Profile Settings</span>
+                  </Link>
+                  <button
+                    onClick={() => router.push('/')}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-t border-border"
+                  >
+                    <LogOut className="w-4 h-4" style={{ color: 'var(--brand-pink-dark)' }} />
+                    <span className="text-foreground">Logout</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-6 py-12">
+        {/* Welcome Section */}
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5 }}
+          className="mb-12"
+        >
+          <h1 className="text-5xl font-bold text-foreground mb-3">Welcome back, Emily</h1>
+          <p className="text-xl text-muted-foreground">
+            Track your clinical progress and view procedures approved by your instructors
+          </p>
+        </motion.div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          {stats.map((stat, index) => (
+            <motion.div
+              key={index}
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.5, delay: index * 0.1 }}
+              className="bg-white border border-border rounded-2xl p-6 hover:shadow-lg transition-all"
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.borderColor = 'var(--brand-pink-medium)')
+              }
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = '')}
+            >
+              <div className="flex items-center gap-4">
+                <div
+                  className="w-12 h-12 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: `${stat.color}20` }}
+                >
+                  <stat.icon className="w-6 h-6" style={{ color: stat.color }} />
+                </div>
+                <div>
+                  <div className="text-3xl font-bold text-foreground">{stat.value}</div>
+                  <div className="text-sm text-muted-foreground">{stat.label}</div>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Announcements or Procedures */}
+        {showAnnouncements ? (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="mb-12"
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <Bell className="w-8 h-8" style={{ color: 'var(--brand-pink-dark)' }} />
+              <h2 className="text-3xl font-bold text-foreground">Announcements</h2>
+            </div>
+            <div className="space-y-6">
+              {announcements.map((announcement, index) => (
+                <motion.article
+                  key={announcement.id}
+                  initial={{ y: 30, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  className="bg-white border border-border rounded-2xl p-8 hover:shadow-lg transition-all"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h3 className="text-2xl font-bold text-foreground mb-2">
+                        {announcement.title}
+                      </h3>
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">{announcement.instructor}</span>
+                        <span>•</span>
+                        <span>{announcement.role}</span>
+                        <span>•</span>
+                        <span>{announcement.date}</span>
+                      </div>
+                    </div>
+                    <span
+                      className="px-3 py-1 rounded-full text-sm text-white"
+                      style={{ backgroundColor: categoryColors[announcement.category] }}
+                    >
+                      {announcement.category}
+                    </span>
+                  </div>
+                  <p className="text-foreground leading-relaxed">{announcement.content}</p>
+                </motion.article>
+              ))}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+          >
+            <div className="flex items-center gap-3 mb-6">
+              <FileText className="w-8 h-8" style={{ color: 'var(--brand-green-dark)' }} />
+              <h2 className="text-3xl font-bold text-foreground">Allowed Procedures</h2>
+            </div>
+            <p className="text-muted-foreground mb-8">
+              Procedures you are authorized to perform by your clinical instructors
+            </p>
+
+            <div className="space-y-4">
+              {allowedProcedures.map((procedure, index) => (
+                <motion.div
+                  key={procedure.id}
+                  initial={{ x: -20, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  className={`bg-white border-2 border-border rounded-xl p-6 transition-all ${
+                    procedure.status === 'locked'
+                      ? 'opacity-60 cursor-not-allowed'
+                      : 'hover:shadow-lg cursor-pointer'
+                  }`}
+                  style={{
+                    borderLeftWidth: '6px',
+                    borderLeftColor:
+                      procedure.status === 'locked'
+                        ? '#9CA3AF'
+                        : procedure.status === 'completed' || procedure.status === 'evaluated'
+                        ? 'var(--brand-green-dark)'
+                        : 'var(--brand-pink-dark)',
+                  }}
+                  onClick={() => procedure.status !== 'locked' && setSelectedProcedure(procedure)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h4
+                        className={`text-xl font-bold mb-1 ${
+                          procedure.status === 'locked'
+                            ? 'text-muted-foreground'
+                            : 'text-foreground'
+                        }`}
+                      >
+                        {procedure.name}
+                      </h4>
+                      <span
+                        className="inline-block px-3 py-1 rounded-full text-xs text-white"
+                        style={{
+                          backgroundColor:
+                            procedure.status === 'locked'
+                              ? '#9CA3AF'
+                              : 'var(--brand-green-medium)',
+                        }}
+                      >
+                        {procedure.category}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {procedure.resources.length > 0 && procedure.status !== 'locked' && (
+                        <span
+                          className="px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1"
+                          style={{
+                            backgroundColor: 'rgba(69,117,88,0.12)',
+                            color: 'var(--brand-green-dark)',
+                          }}
+                        >
+                          <FileText className="w-3 h-3" />
+                          {procedure.resources.length}
+                        </span>
+                      )}
+                      <span
+                        className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 text-white"
+                        style={{
+                          backgroundColor:
+                            procedure.status === 'locked'
+                              ? '#9CA3AF'
+                              : procedure.status === 'completed' || procedure.status === 'evaluated'
+                              ? 'var(--brand-green-dark)'
+                              : 'var(--brand-pink-dark)',
+                        }}
+                      >
+                        {procedure.status === 'locked' ? (
+                          <><Lock className="w-4 h-4" /> Locked</>
+                        ) : procedure.status === 'evaluated' ? (
+                          <><CheckCircle className="w-4 h-4" /> Evaluated</>
+                        ) : procedure.status === 'completed' ? (
+                          <><CheckCircle className="w-4 h-4" /> Completed</>
+                        ) : (
+                          <><Clock className="w-4 h-4" /> In Progress</>
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 text-sm mb-3">
+                    <div>
+                      <span className="text-muted-foreground">
+                        {procedure.status === 'locked' ? 'Instructor:' : 'Allowed by:'}
+                      </span>
+                      <span
+                        className={`ml-2 font-medium ${
+                          procedure.status === 'locked' ? 'text-muted-foreground' : 'text-foreground'
+                        }`}
+                      >
+                        {procedure.allowedBy}
+                      </span>
+                    </div>
+                    {procedure.status !== 'locked' && (
+                      <div>
+                        <span className="text-muted-foreground">
+                          {procedure.status === 'evaluated'
+                            ? 'Evaluated:'
+                            : procedure.status === 'completed'
+                            ? 'Completed:'
+                            : 'Date Allowed:'}
+                        </span>
+                        <span className="ml-2 font-medium text-foreground">
+                          {procedure.status === 'evaluated'
+                            ? procedure.evaluation?.evaluationDate
+                            : procedure.status === 'completed'
+                            ? procedure.completedDate
+                            : procedure.allowedDate}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    className="p-3 rounded-lg"
+                    style={{
+                      backgroundColor:
+                        procedure.status === 'locked'
+                          ? '#F3F4F6'
+                          : procedure.status === 'completed' || procedure.status === 'evaluated'
+                          ? '#d4edda'
+                          : 'var(--brand-pink-light)',
+                    }}
+                  >
+                    <p
+                      className={`text-sm ${
+                        procedure.status === 'locked' ? 'text-muted-foreground' : 'text-foreground'
+                      }`}
+                    >
+                      <span className="font-medium">
+                        {procedure.status === 'evaluated'
+                          ? 'Evaluator Feedback:'
+                          : 'Instructor Notes:'}
+                      </span>{' '}
+                      {procedure.status === 'evaluated'
+                        ? procedure.evaluation?.feedback
+                        : procedure.notes}
+                    </p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </div>
+
+      {/* Procedure Detail Modal */}
+      {selectedProcedure && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+          onClick={() => setSelectedProcedure(null)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-8">
+              <div className="flex items-start justify-between mb-6">
+                <div className="flex-1">
+                  <h3 className="text-3xl font-bold text-foreground mb-2">
+                    {selectedProcedure.name}
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="px-3 py-1 rounded-full text-xs text-white"
+                      style={{ backgroundColor: 'var(--brand-green-medium)' }}
+                    >
+                      {selectedProcedure.category}
+                    </span>
+                    <span
+                      className="px-3 py-1 rounded-lg text-xs font-medium text-white"
+                      style={{
+                        backgroundColor:
+                          selectedProcedure.status === 'completed' ||
+                          selectedProcedure.status === 'evaluated'
+                            ? 'var(--brand-green-dark)'
+                            : 'var(--brand-pink-dark)',
+                      }}
+                    >
+                      {selectedProcedure.status === 'evaluated'
+                        ? 'Evaluated'
+                        : selectedProcedure.status === 'completed'
+                        ? 'Completed'
+                        : 'In Progress'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedProcedure(null)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6 text-muted-foreground" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b border-border">
+                <div>
+                  <div className="text-sm text-muted-foreground mb-1">Allowed by</div>
+                  <div className="font-medium text-foreground">{selectedProcedure.allowedBy}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground mb-1">Date Allowed</div>
+                  <div className="font-medium text-foreground">{selectedProcedure.allowedDate}</div>
+                </div>
+                {(selectedProcedure.status === 'completed' ||
+                  selectedProcedure.status === 'evaluated') && (
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Completed Date</div>
+                    <div className="font-medium text-foreground">
+                      {selectedProcedure.completedDate}
+                    </div>
+                  </div>
+                )}
+                {selectedProcedure.status === 'evaluated' && (
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Evaluation Date</div>
+                    <div className="font-medium text-foreground">
+                      {selectedProcedure.evaluation?.evaluationDate}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-6">
+                <h4 className="font-medium text-foreground mb-2">
+                  {selectedProcedure.status === 'evaluated'
+                    ? 'Evaluator Feedback'
+                    : 'Instructor Notes'}
+                </h4>
+                <div
+                  className="p-4 rounded-lg"
+                  style={{
+                    backgroundColor:
+                      selectedProcedure.status === 'completed' ||
+                      selectedProcedure.status === 'evaluated'
+                        ? '#d4edda'
+                        : 'var(--brand-pink-light)',
+                  }}
+                >
+                  <p className="text-foreground">
+                    {selectedProcedure.status === 'evaluated'
+                      ? selectedProcedure.evaluation?.feedback
+                      : selectedProcedure.notes}
+                  </p>
+                </div>
+              </div>
+
+              {selectedProcedure.status === 'evaluated' && selectedProcedure.evaluation && (
+                <div className="mb-6 border-t border-border pt-6">
+                  <h4 className="font-medium text-foreground mb-4 flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5" style={{ color: 'var(--brand-green-dark)' }} />
+                    Performance Evaluation
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div
+                      className="p-6 rounded-xl border-2"
+                      style={{ backgroundColor: '#d4edda', borderColor: 'var(--brand-green-dark)' }}
+                    >
+                      <div className="text-sm text-muted-foreground mb-2">Overall Score</div>
+                      <div
+                        className="text-4xl font-bold"
+                        style={{ color: 'var(--brand-green-dark)' }}
+                      >
+                        {selectedProcedure.evaluation.overallScore}/
+                        {selectedProcedure.evaluation.maxScore}
+                      </div>
+                    </div>
+                    <div
+                      className="p-6 rounded-xl border-2"
+                      style={{
+                        backgroundColor: '#d4edda',
+                        borderColor: 'var(--brand-green-medium)',
+                      }}
+                    >
+                      <div className="text-sm text-muted-foreground mb-2">Competency Status</div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle
+                          className="w-6 h-6"
+                          style={{ color: 'var(--brand-green-medium)' }}
+                        />
+                        <div className="text-2xl font-bold text-foreground">
+                          {selectedProcedure.evaluation.competencyStatus}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {selectedProcedure.evaluation.rubric.map((item, index) => (
+                      <div
+                        key={index}
+                        className="border border-border rounded-lg p-4 hover:shadow-md transition-all"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="font-medium text-foreground mb-1">{item.criterion}</div>
+                            <div className="text-sm text-muted-foreground">{item.description}</div>
+                          </div>
+                          <div className="text-right ml-4">
+                            <div
+                              className="text-2xl font-bold"
+                              style={{ color: 'var(--brand-green-dark)' }}
+                            >
+                              {item.score}/{item.maxScore}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
+                          <div
+                            className="h-2 rounded-full transition-all"
+                            style={{
+                              width: `${(item.score / item.maxScore) * 100}%`,
+                              backgroundColor:
+                                item.score / item.maxScore >= 0.9
+                                  ? 'var(--brand-green-dark)'
+                                  : item.score / item.maxScore >= 0.7
+                                  ? 'var(--brand-green-medium)'
+                                  : 'var(--brand-pink-dark)',
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedProcedure.resources.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-foreground mb-3 flex items-center gap-2">
+                    <FileText className="w-5 h-5" style={{ color: 'var(--brand-green-dark)' }} />
+                    Attached Resources
+                  </h4>
+                  <div className="space-y-3">
+                    {selectedProcedure.resources.map((resource, index) => (
+                      <a
+                        key={index}
+                        href={resource.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-4 p-4 rounded-lg border-2 border-border hover:shadow-md transition-all group"
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.borderColor = 'var(--brand-green-medium)')
+                        }
+                        onMouseLeave={(e) => (e.currentTarget.style.borderColor = '')}
+                      >
+                        <div
+                          className="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0"
+                          style={{
+                            backgroundColor:
+                              resource.type === 'file'
+                                ? 'var(--brand-pink-light)'
+                                : 'rgba(69,117,88,0.12)',
+                          }}
+                        >
+                          {resource.type === 'file' ? (
+                            <Download className="w-6 h-6" style={{ color: 'var(--brand-pink-dark)' }} />
+                          ) : (
+                            <LinkIcon className="w-6 h-6" style={{ color: 'var(--brand-green-dark)' }} />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-medium text-foreground">{resource.name}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {resource.type === 'file' ? 'Download file' : 'Open link'}
+                          </div>
+                        </div>
+                        <ExternalLink className="w-5 h-5 text-muted-foreground" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </div>
+  );
+}
