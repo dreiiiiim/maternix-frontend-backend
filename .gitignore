@@ -12,6 +12,8 @@ frontend/out
 # Build output
 frontend/build
 frontend/dist
+backend/dist
+backend/coverage
 
 # Environment variables
 .env
@@ -24,6 +26,7 @@ frontend/.env.local
 frontend/.env.development.local
 frontend/.env.test.local
 frontend/.env.production.local
+backend/.env
 
 # Logs
 npm-debug.log*

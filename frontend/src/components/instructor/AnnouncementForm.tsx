@@ -1,38 +1,118 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Send, Plus, CheckCircle, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
+import { Send, Plus, CheckCircle, Trash2 } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+
+type AnnouncementItem = {
+  id: string
+  title: string
+  category: string
+  created_at: string
+}
 
 export function AnnouncementForm() {
-  const [formData, setFormData] = useState({ title: '', content: '', category: 'Academic' });
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [announcements, setAnnouncements] = useState([
-    { id: 1, title: 'New Clinical Modules Available', category: 'Academic', date: 'April 12, 2026' },
-    { id: 2, title: 'Clinical Rotation Schedule Update', category: 'Schedule', date: 'April 10, 2026' },
-  ]);
+  const supabase = useMemo(() => createClient(), [])
 
-  const categories = ['Academic', 'Schedule', 'Assessment', 'Event', 'Policy'];
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([])
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newAnnouncement = {
-      id: Math.max(...announcements.map((a) => a.id), 0) + 1,
-      title: formData.title,
-      category: formData.category,
-      date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-    };
-    setAnnouncements([newAnnouncement, ...announcements]);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
-    setFormData({ title: '', content: '', category: 'Academic' });
-  };
+  const [formData, setFormData] = useState({
+    title: '',
+    content: '',
+    category: 'Academic',
+  })
 
-  const handleDelete = (id: number) => {
-    if (confirm('Are you sure you want to delete this announcement?')) {
-      setAnnouncements(announcements.filter((a) => a.id !== id));
+  const categories = ['Academic', 'Schedule', 'Assessment', 'Event', 'Policy']
+
+  const fetchAnnouncements = useCallback(async () => {
+    setLoading(true)
+    setError('')
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      setAnnouncements([])
+      setLoading(false)
+      return
     }
-  };
+
+    const { data, error: fetchError } = await supabase
+      .from('announcements')
+      .select('id, title, category, created_at')
+      .eq('created_by', user.id)
+      .order('created_at', { ascending: false })
+
+    if (fetchError) {
+      setError(fetchError.message)
+      setAnnouncements([])
+    } else {
+      setAnnouncements((data ?? []) as AnnouncementItem[])
+    }
+
+    setLoading(false)
+  }, [supabase])
+
+  useEffect(() => {
+    fetchAnnouncements()
+  }, [fetchAnnouncements])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setSubmitting(true)
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      setError('You must be logged in to post announcements.')
+      setSubmitting(false)
+      return
+    }
+
+    const { error: insertError } = await supabase.from('announcements').insert({
+      title: formData.title,
+      content: formData.content,
+      category: formData.category,
+      target_role: 'student',
+      created_by: user.id,
+    })
+
+    if (insertError) {
+      setError(insertError.message)
+      setSubmitting(false)
+      return
+    }
+
+    setShowSuccess(true)
+    setTimeout(() => setShowSuccess(false), 2500)
+    setFormData({ title: '', content: '', category: 'Academic' })
+    await fetchAnnouncements()
+    setSubmitting(false)
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this announcement?')) return
+    setError('')
+
+    const { error: deleteError } = await supabase.from('announcements').delete().eq('id', id)
+    if (deleteError) {
+      setError(deleteError.message)
+      return
+    }
+
+    setAnnouncements((prev) => prev.filter((item) => item.id !== id))
+  }
 
   return (
     <div className="max-w-3xl">
@@ -65,8 +145,14 @@ export function AnnouncementForm() {
             }}
           >
             <CheckCircle className="w-5 h-5" style={{ color: 'var(--brand-green-dark)' }} />
-            <span className="font-medium text-foreground">Announcement posted successfully!</span>
+            <span className="font-medium text-foreground">Announcement posted successfully.</span>
           </motion.div>
+        )}
+
+        {error && (
+          <div className="mb-6 p-4 rounded-lg border border-red-200 bg-red-50 text-red-700">
+            {error}
+          </div>
         )}
 
         <form onSubmit={handleSubmit} className="bg-white border border-border rounded-2xl p-8">
@@ -97,7 +183,9 @@ export function AnnouncementForm() {
                 className="w-full px-4 py-3 rounded-lg border border-border bg-input-background focus:outline-none focus:ring-2"
               >
                 {categories.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
                 ))}
               </select>
             </div>
@@ -118,24 +206,23 @@ export function AnnouncementForm() {
 
             <button
               type="submit"
-              className="w-full py-3 text-white rounded-lg transition-all hover:scale-105 flex items-center justify-center gap-2"
+              disabled={submitting}
+              className="w-full py-3 text-white rounded-lg transition-all hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-70"
               style={{ backgroundColor: 'var(--brand-green-dark)' }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.backgroundColor = 'var(--brand-green-medium)')
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.backgroundColor = 'var(--brand-green-dark)')
-              }
             >
               <Send className="w-5 h-5" />
-              <span>Post Announcement</span>
+              <span>{submitting ? 'Posting...' : 'Post Announcement'}</span>
             </button>
           </div>
         </form>
 
         <div className="mt-8">
           <h3 className="text-xl font-bold text-foreground mb-4">Recent Announcements</h3>
-          {announcements.length === 0 ? (
+          {loading ? (
+            <div className="bg-white border border-border rounded-lg p-8 text-center">
+              <p className="text-muted-foreground">Loading...</p>
+            </div>
+          ) : announcements.length === 0 ? (
             <div className="bg-white border border-border rounded-lg p-8 text-center">
               <p className="text-muted-foreground">No announcements posted yet</p>
             </div>
@@ -148,7 +235,13 @@ export function AnnouncementForm() {
                 >
                   <div className="flex-1">
                     <h4 className="font-medium text-foreground">{announcement.title}</h4>
-                    <p className="text-sm text-muted-foreground">{announcement.date}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(announcement.created_at).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <span
@@ -171,5 +264,5 @@ export function AnnouncementForm() {
         </div>
       </motion.div>
     </div>
-  );
+  )
 }

@@ -4,8 +4,9 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { User, Bell, FileText, Users, LogOut } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { createClient } from '@/lib/supabase/client';
 import { AnnouncementForm } from './instructor/AnnouncementForm';
 import { ProcedureManagement } from './instructor/ProcedureManagement';
 import { StudentMasterlist } from './instructor/StudentMasterlist';
@@ -14,10 +15,28 @@ type TabType = 'announcements' | 'procedures' | 'students';
 
 export function InstructorDashboard() {
   const router = useRouter();
+  const supabase = createClient();
   const [activeTab, setActiveTab] = useState<TabType>('announcements');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [instructorName, setInstructorName] = useState('Clinical Instructor');
 
-  const handleLogout = () => {
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) return;
+      supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', data.user.id)
+        .single()
+        .then(({ data: profile }) => {
+          if (profile?.full_name) setInstructorName(profile.full_name);
+        });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     router.push('/');
   };
 
@@ -55,7 +74,7 @@ export function InstructorDashboard() {
                 <User className="w-4 h-4 text-white" />
               </div>
               <div className="text-sm">
-                <div className="font-medium text-foreground">Dr. Sarah Mitchell</div>
+                <div className="font-medium text-foreground">{instructorName}</div>
                 <div className="text-muted-foreground text-xs">Clinical Instructor</div>
               </div>
             </button>

@@ -1,83 +1,183 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Users, ChevronDown, ChevronUp, Mail, Phone, Calendar, CheckCircle, Clock } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
+import {
+  Users,
+  ChevronDown,
+  ChevronUp,
+  Mail,
+  Phone,
+  Calendar,
+  CheckCircle,
+  Clock,
+} from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
-type Student = {
-  id: number;
-  name: string;
-  email: string;
-  phone: string;
-  enrollmentDate: string;
-  completedProcedures: number;
-  totalProcedures: number;
-};
+type StudentRecord = {
+  id: string
+  studentNo: string
+  name: string
+  email: string
+  phone: string
+  completedProcedures: number
+  totalProcedures: number
+}
 
-type ClassSection = {
-  id: number;
-  name: string;
-  semester: string;
-  schedule: string;
-  studentCount: number;
-  students: Student[];
-};
+type SectionRecord = {
+  id: string
+  name: string
+  semester: string
+  schedule: string
+  students: StudentRecord[]
+}
 
-const classSections: ClassSection[] = [
-  {
-    id: 1,
-    name: 'BSN 2A',
-    semester: 'Spring 2026',
-    schedule: 'Mon/Wed 8:00 AM - 12:00 PM',
-    studentCount: 6,
-    students: [
-      { id: 1, name: 'Emily Rodriguez', email: 'emily.rodriguez@nursing.edu', phone: '(555) 123-4567', enrollmentDate: 'January 15, 2026', completedProcedures: 2, totalProcedures: 3 },
-      { id: 2, name: 'Michael Chen', email: 'michael.chen@nursing.edu', phone: '(555) 234-5678', enrollmentDate: 'January 15, 2026', completedProcedures: 2, totalProcedures: 3 },
-      { id: 3, name: 'Sarah Johnson', email: 'sarah.johnson@nursing.edu', phone: '(555) 345-6789', enrollmentDate: 'January 15, 2026', completedProcedures: 1, totalProcedures: 3 },
-      { id: 4, name: 'David Kim', email: 'david.kim@nursing.edu', phone: '(555) 456-7890', enrollmentDate: 'January 15, 2026', completedProcedures: 2, totalProcedures: 3 },
-      { id: 5, name: 'Jessica Martinez', email: 'jessica.martinez@nursing.edu', phone: '(555) 567-8901', enrollmentDate: 'January 15, 2026', completedProcedures: 1, totalProcedures: 3 },
-      { id: 6, name: 'Robert Taylor', email: 'robert.taylor@nursing.edu', phone: '(555) 678-9012', enrollmentDate: 'January 15, 2026', completedProcedures: 2, totalProcedures: 3 },
-    ],
-  },
-  {
-    id: 2,
-    name: 'BSN 2B',
-    semester: 'Spring 2026',
-    schedule: 'Tue/Thu 1:00 PM - 5:00 PM',
-    studentCount: 5,
-    students: [
-      { id: 7, name: 'Natalie Anderson', email: 'natalie.anderson@nursing.edu', phone: '(555) 345-6790', enrollmentDate: 'January 15, 2026', completedProcedures: 2, totalProcedures: 3 },
-      { id: 8, name: 'Brandon Thomas', email: 'brandon.thomas@nursing.edu', phone: '(555) 456-7891', enrollmentDate: 'January 15, 2026', completedProcedures: 1, totalProcedures: 3 },
-      { id: 9, name: 'Olivia Moore', email: 'olivia.moore@nursing.edu', phone: '(555) 567-8902', enrollmentDate: 'January 15, 2026', completedProcedures: 2, totalProcedures: 3 },
-      { id: 10, name: 'Ryan Jackson', email: 'ryan.jackson@nursing.edu', phone: '(555) 678-9013', enrollmentDate: 'January 15, 2026', completedProcedures: 1, totalProcedures: 3 },
-      { id: 11, name: 'Sophia Martin', email: 'sophia.martin@nursing.edu', phone: '(555) 789-0124', enrollmentDate: 'January 15, 2026', completedProcedures: 2, totalProcedures: 3 },
-    ],
-  },
-  {
-    id: 3,
-    name: 'BSN 2C',
-    semester: 'Spring 2026',
-    schedule: 'Fri 8:00 AM - 4:00 PM',
-    studentCount: 4,
-    students: [
-      { id: 12, name: 'Victoria Rodriguez', email: 'victoria.rodriguez@nursing.edu', phone: '(555) 345-6791', enrollmentDate: 'January 15, 2026', completedProcedures: 2, totalProcedures: 3 },
-      { id: 13, name: 'Nicholas Lewis', email: 'nicholas.lewis@nursing.edu', phone: '(555) 456-7892', enrollmentDate: 'January 15, 2026', completedProcedures: 1, totalProcedures: 3 },
-      { id: 14, name: 'Abigail Walker', email: 'abigail.walker@nursing.edu', phone: '(555) 567-8903', enrollmentDate: 'January 15, 2026', completedProcedures: 2, totalProcedures: 3 },
-      { id: 15, name: 'Tyler Hall', email: 'tyler.hall@nursing.edu', phone: '(555) 678-9014', enrollmentDate: 'January 15, 2026', completedProcedures: 1, totalProcedures: 3 },
-    ],
-  },
-];
+type StudentProcedureStatusRow = {
+  student_id: string
+  status: 'pending' | 'in_progress' | 'completed' | 'evaluated'
+}
+
+type RawSectionRow = {
+  id: string
+  name: string
+  semester: string
+  schedule: string | null
+  students:
+    | Array<{
+        id: string
+        student_no: string
+        profiles:
+          | {
+              full_name: string | null
+              email: string | null
+              phone_number: string | null
+            }
+          | Array<{
+              full_name: string | null
+              email: string | null
+              phone_number: string | null
+            }>
+          | null
+      }>
+    | null
+}
+
+function asArray<T>(value: T | T[] | null | undefined): T[] {
+  if (!value) return []
+  return Array.isArray(value) ? value : [value]
+}
 
 export function StudentMasterlist() {
-  const [expandedSections, setExpandedSections] = useState<number[]>([]);
+  const supabase = useMemo(() => createClient(), [])
 
-  const toggleSection = (sectionId: number) => {
+  const [expandedSections, setExpandedSections] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [sections, setSections] = useState<SectionRecord[]>([])
+
+  const toggleSection = (sectionId: string) => {
     setExpandedSections((prev) =>
       prev.includes(sectionId) ? prev.filter((id) => id !== sectionId) : [...prev, sectionId]
-    );
-  };
+    )
+  }
 
-  const totalStudents = classSections.reduce((sum, s) => sum + s.studentCount, 0);
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      setSections([])
+      setLoading(false)
+      return
+    }
+
+    const { data: sectionsData, error: sectionsError } = await supabase
+      .from('sections')
+      .select(
+        'id, name, semester, schedule, students(id, student_no, profiles(full_name, email, phone_number))'
+      )
+      .eq('instructor_id', user.id)
+      .order('name', { ascending: true })
+
+    if (sectionsError) {
+      setError(sectionsError.message)
+      setSections([])
+      setLoading(false)
+      return
+    }
+
+    const rawSections = ((sectionsData ?? []) as RawSectionRow[]).map((section) => ({
+      ...section,
+      students: asArray(section.students),
+    }))
+
+    const allStudentIds = rawSections.flatMap((section) =>
+      section.students.map((student) => student.id)
+    )
+
+    let statusRows: StudentProcedureStatusRow[] = []
+    if (allStudentIds.length > 0) {
+      const { data: spData, error: spError } = await supabase
+        .from('student_procedures')
+        .select('student_id, status')
+        .in('student_id', allStudentIds)
+
+      if (spError) {
+        setError(spError.message)
+      } else {
+        statusRows = (spData ?? []) as StudentProcedureStatusRow[]
+      }
+    }
+
+    const mappedSections: SectionRecord[] = rawSections.map((section) => ({
+      id: section.id,
+      name: section.name,
+      semester: section.semester,
+      schedule: section.schedule ?? 'No schedule',
+      students: section.students.map((student) => {
+        const profile = asArray(student.profiles)[0]
+        const studentStatuses = statusRows.filter((row) => row.student_id === student.id)
+        const totalProcedures = studentStatuses.length
+        const completedProcedures = studentStatuses.filter((row) =>
+          ['completed', 'evaluated'].includes(row.status)
+        ).length
+
+        return {
+          id: student.id,
+          studentNo: student.student_no,
+          name: profile?.full_name ?? 'Unnamed student',
+          email: profile?.email ?? 'No email',
+          phone: profile?.phone_number ?? 'No phone number',
+          completedProcedures,
+          totalProcedures,
+        }
+      }),
+    }))
+
+    setSections(mappedSections)
+    setLoading(false)
+  }, [supabase])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  const totalStudents = sections.reduce((sum, section) => sum + section.students.length, 0)
+  const allCompletionRatios = sections
+    .flatMap((section) => section.students)
+    .map((student) =>
+      student.totalProcedures > 0
+        ? (student.completedProcedures / student.totalProcedures) * 100
+        : 0
+    )
+  const avgCompletion = allCompletionRatios.length
+    ? Math.round(allCompletionRatios.reduce((sum, value) => sum + value, 0) / allCompletionRatios.length)
+    : 0
 
   return (
     <div>
@@ -88,15 +188,20 @@ export function StudentMasterlist() {
       >
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-foreground mb-2">Student Masterlist</h2>
-          <p className="text-muted-foreground">View all students organized by class section</p>
+          <p className="text-muted-foreground">View students in your assigned sections</p>
         </div>
 
-        {/* Overview Stats */}
+        {error && (
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+            {error}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {[
             { label: 'Total Students', value: totalStudents, icon: Users, color: 'var(--brand-green-dark)' },
-            { label: 'Class Sections', value: classSections.length, icon: Users, color: 'var(--brand-pink-dark)' },
-            { label: 'Avg. Completion', value: '53%', icon: CheckCircle, color: 'var(--brand-green-medium)' },
+            { label: 'Class Sections', value: sections.length, icon: Users, color: 'var(--brand-pink-dark)' },
+            { label: 'Avg. Completion', value: `${avgCompletion}%`, icon: CheckCircle, color: 'var(--brand-green-medium)' },
           ].map((stat, i) => (
             <div key={i} className="bg-white border border-border rounded-xl p-6">
               <div className="flex items-center gap-3">
@@ -115,120 +220,159 @@ export function StudentMasterlist() {
           ))}
         </div>
 
-        {/* Class Sections */}
-        <div className="space-y-4">
-          {classSections.map((section, index) => {
-            const isExpanded = expandedSections.includes(section.id);
-            return (
-              <motion.div
-                key={section.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.1 }}
-                className="bg-white border-2 border-border rounded-xl overflow-hidden"
-              >
-                <button
-                  onClick={() => toggleSection(section.id)}
-                  className="w-full p-6 flex items-center justify-between hover:bg-gray-50 transition-colors"
+        {loading ? (
+          <div className="bg-white border border-border rounded-xl p-8 text-center text-muted-foreground">
+            Loading student masterlist...
+          </div>
+        ) : sections.length === 0 ? (
+          <div className="bg-white border border-border rounded-xl p-8 text-center text-muted-foreground">
+            No sections assigned yet.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {sections.map((section, index) => {
+              const isExpanded = expandedSections.includes(section.id)
+              return (
+                <motion.div
+                  key={section.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: index * 0.1 }}
+                  className="bg-white border-2 border-border rounded-xl overflow-hidden"
                 >
-                  <div className="flex items-center gap-4 flex-1 text-left">
-                    <div
-                      className="w-14 h-14 rounded-full flex items-center justify-center"
-                      style={{ backgroundColor: 'rgba(69,117,88,0.12)' }}
-                    >
-                      <Users className="w-7 h-7" style={{ color: 'var(--brand-green-dark)' }} />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-foreground mb-1">{section.name}</h3>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" /> {section.semester}
-                        </span>
-                        <span>•</span>
-                        <span>{section.schedule}</span>
-                        <span>•</span>
-                        <span className="font-medium text-foreground">{section.studentCount} students</span>
+                  <button
+                    onClick={() => toggleSection(section.id)}
+                    className="w-full p-6 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-4 flex-1 text-left">
+                      <div
+                        className="w-14 h-14 rounded-full flex items-center justify-center"
+                        style={{ backgroundColor: 'rgba(69,117,88,0.12)' }}
+                      >
+                        <Users className="w-7 h-7" style={{ color: 'var(--brand-green-dark)' }} />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold text-foreground mb-1">{section.name}</h3>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-4 h-4" /> {section.semester}
+                          </span>
+                          <span>•</span>
+                          <span>{section.schedule}</span>
+                          <span>•</span>
+                          <span className="font-medium text-foreground">
+                            {section.students.length} students
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="ml-4">
-                    {isExpanded ? (
-                      <ChevronUp className="w-6 h-6" style={{ color: 'var(--brand-green-dark)' }} />
-                    ) : (
-                      <ChevronDown className="w-6 h-6 text-muted-foreground" />
-                    )}
-                  </div>
-                </button>
+                    <div className="ml-4">
+                      {isExpanded ? (
+                        <ChevronUp className="w-6 h-6" style={{ color: 'var(--brand-green-dark)' }} />
+                      ) : (
+                        <ChevronDown className="w-6 h-6 text-muted-foreground" />
+                      )}
+                    </div>
+                  </button>
 
-                {isExpanded && (
-                  <div className="border-t border-border">
-                    <div className="p-6 bg-gray-50">
-                      <div className="grid gap-4">
-                        {section.students.map((student) => {
-                          const pct = Math.round(
-                            (student.completedProcedures / student.totalProcedures) * 100
-                          );
-                          return (
-                            <div
-                              key={student.id}
-                              className="bg-white border border-border rounded-lg p-5 hover:shadow-md transition-all"
-                            >
-                              <div className="flex items-start justify-between mb-3">
-                                <div>
-                                  <h4 className="text-lg font-bold text-foreground mb-1">{student.name}</h4>
-                                  <div className="space-y-1 text-sm text-muted-foreground">
-                                    <div className="flex items-center gap-2">
-                                      <Mail className="w-4 h-4" />
-                                      <a href={`mailto:${student.email}`} className="hover:underline" style={{ color: 'var(--brand-green-dark)' }}>
-                                        {student.email}
-                                      </a>
+                  {isExpanded && (
+                    <div className="border-t border-border">
+                      <div className="p-6 bg-gray-50">
+                        <div className="grid gap-4">
+                          {section.students.map((student) => {
+                            const pct =
+                              student.totalProcedures > 0
+                                ? Math.round(
+                                    (student.completedProcedures / student.totalProcedures) * 100
+                                  )
+                                : 0
+
+                            return (
+                              <div
+                                key={student.id}
+                                className="bg-white border border-border rounded-lg p-5 hover:shadow-md transition-all"
+                              >
+                                <div className="flex items-start justify-between mb-3">
+                                  <div>
+                                    <h4 className="text-lg font-bold text-foreground mb-1">
+                                      {student.name}
+                                    </h4>
+                                    <div className="space-y-1 text-sm text-muted-foreground">
+                                      <div className="flex items-center gap-2">
+                                        <Mail className="w-4 h-4" />
+                                        <a
+                                          href={`mailto:${student.email}`}
+                                          className="hover:underline"
+                                          style={{ color: 'var(--brand-green-dark)' }}
+                                        >
+                                          {student.email}
+                                        </a>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Phone className="w-4 h-4" /> {student.phone}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <Calendar className="w-4 h-4" /> Student No: {student.studentNo}
+                                      </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <Phone className="w-4 h-4" /> {student.phone}
+                                  </div>
+                                  <div className="text-right">
+                                    <div
+                                      className="text-2xl font-bold mb-1"
+                                      style={{
+                                        color:
+                                          pct >= 70
+                                            ? 'var(--brand-green-dark)'
+                                            : 'var(--brand-pink-dark)',
+                                      }}
+                                    >
+                                      {pct}%
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <Calendar className="w-4 h-4" /> Enrolled: {student.enrollmentDate}
-                                    </div>
+                                    <div className="text-xs text-muted-foreground">Completion</div>
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  <div className="text-2xl font-bold mb-1" style={{ color: pct >= 70 ? 'var(--brand-green-dark)' : 'var(--brand-pink-dark)' }}>
-                                    {pct}%
+                                <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border">
+                                  <div className="text-center">
+                                    <div className="flex items-center justify-center gap-1 mb-1">
+                                      <CheckCircle
+                                        className="w-4 h-4"
+                                        style={{ color: 'var(--brand-green-dark)' }}
+                                      />
+                                      <span className="font-bold text-foreground">
+                                        {student.completedProcedures}
+                                      </span>
+                                      <span className="text-muted-foreground">
+                                        / {student.totalProcedures}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">Procedures</div>
                                   </div>
-                                  <div className="text-xs text-muted-foreground">Completion</div>
+                                  <div className="text-center border-l border-border">
+                                    <div className="flex items-center justify-center gap-1 mb-1">
+                                      <Clock
+                                        className="w-4 h-4"
+                                        style={{ color: 'var(--brand-pink-dark)' }}
+                                      />
+                                      <span className="font-bold text-foreground">
+                                        {Math.max(student.totalProcedures - student.completedProcedures, 0)}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">Pending</div>
+                                  </div>
                                 </div>
                               </div>
-                              <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border">
-                                <div className="text-center">
-                                  <div className="flex items-center justify-center gap-1 mb-1">
-                                    <CheckCircle className="w-4 h-4" style={{ color: 'var(--brand-green-dark)' }} />
-                                    <span className="font-bold text-foreground">{student.completedProcedures}</span>
-                                    <span className="text-muted-foreground">/ {student.totalProcedures}</span>
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">Procedures</div>
-                                </div>
-                                <div className="text-center border-l border-border">
-                                  <div className="flex items-center justify-center gap-1 mb-1">
-                                    <Clock className="w-4 h-4" style={{ color: 'var(--brand-pink-dark)' }} />
-                                    <span className="font-bold text-foreground">
-                                      {student.totalProcedures - student.completedProcedures}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">Pending</div>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                            )
+                          })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
-              </motion.div>
-            );
-          })}
-        </div>
+                  )}
+                </motion.div>
+              )
+            })}
+          </div>
+        )}
       </motion.div>
     </div>
-  );
+  )
 }

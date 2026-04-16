@@ -18,171 +18,47 @@ import {
   Bell,
   Lock,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnnouncementPopup } from './AnnouncementPopup';
+import { createClient } from '@/lib/supabase/client';
 
-const allowedProcedures = [
-  {
-    id: 1,
-    name: "Leopold's Maneuver",
-    category: 'Clinical Procedure',
-    allowedBy: 'Dr. Sarah Mitchell',
-    allowedDate: 'April 5, 2026',
-    status: 'evaluated',
-    completedDate: 'April 10, 2026',
-    notes:
-      'Excellent technique demonstrated. Correct identification of fetal position and presentation.',
-    evaluation: {
-      overallScore: 95,
-      maxScore: 100,
-      competencyStatus: 'Competent',
-      evaluationDate: 'April 11, 2026',
-      evaluatorName: 'Dr. Sarah Mitchell',
-      feedback:
-        'Outstanding performance. Your technique was precise and you demonstrated excellent understanding of fetal positioning. Continue to maintain this level of proficiency in future clinical procedures.',
-      rubric: [
-        {
-          criterion: 'Preparation & Setup',
-          score: 24,
-          maxScore: 24,
-          description: 'Proper hand hygiene, positioning, and patient explanation',
-        },
-        {
-          criterion: 'Procedural Accuracy',
-          score: 35,
-          maxScore: 40,
-          description: 'Correct execution of all four Leopold maneuvers',
-        },
-        {
-          criterion: 'Safety & Comfort',
-          score: 20,
-          maxScore: 20,
-          description: 'Patient safety and comfort maintained throughout',
-        },
-        {
-          criterion: 'Communication',
-          score: 16,
-          maxScore: 16,
-          description: 'Clear communication with patient and documentation',
-        },
-      ],
-    },
-    resources: [
-      { type: 'file' as const, name: "Leopold's Maneuver Guide.pdf", url: '#' },
-      { type: 'link' as const, name: 'Video Tutorial', url: '#' },
-    ],
-  },
-  {
-    id: 2,
-    name: 'EINC',
-    category: 'Newborn Care',
-    allowedBy: 'Dr. Sarah Mitchell',
-    allowedDate: 'April 11, 2026',
-    status: 'completed',
-    completedDate: 'April 13, 2026',
-    notes:
-      'Successfully implemented Early and Immediate Newborn Care protocol. Good understanding of skin-to-skin contact importance.',
-    evaluation: null,
-    resources: [{ type: 'file' as const, name: 'EINC Protocol Guidelines.pdf', url: '#' }],
-  },
-  {
-    id: 3,
-    name: 'Labor and Delivery',
-    category: 'Clinical Procedure',
-    allowedBy: 'Prof. Jennifer Lopez',
-    allowedDate: 'April 14, 2026',
-    status: 'pending',
-    completedDate: null,
-    notes:
-      'Cleared to assist in labor and delivery. Must be under direct supervision of clinical instructor.',
-    evaluation: null,
-    resources: [
-      { type: 'file' as const, name: 'Labor and Delivery Procedures.pdf', url: '#' },
-      { type: 'link' as const, name: 'Stages of Labor Reference', url: '#' },
-    ],
-  },
-  {
-    id: 4,
-    name: 'Intramuscular Injection',
-    category: 'Medication Administration',
-    allowedBy: 'Dr. Sarah Mitchell',
-    allowedDate: null,
-    status: 'locked',
-    completedDate: null,
-    notes: 'Complete Labor and Delivery to unlock this procedure.',
-    evaluation: null,
-    resources: [],
-  },
-  {
-    id: 5,
-    name: 'Intradermal Injection',
-    category: 'Medication Administration',
-    allowedBy: 'Dr. Sarah Mitchell',
-    allowedDate: null,
-    status: 'locked',
-    completedDate: null,
-    notes: 'Complete Intramuscular Injection to unlock this procedure.',
-    evaluation: null,
-    resources: [],
-  },
-  {
-    id: 6,
-    name: 'NICU',
-    category: 'Specialized Care',
-    allowedBy: 'Dr. Maria Santos',
-    allowedDate: null,
-    status: 'locked',
-    completedDate: null,
-    notes: 'Complete Intradermal Injection to unlock this procedure.',
-    evaluation: null,
-    resources: [],
-  },
-];
+// ── Types ──────────────────────────────────────────────────────────────────
 
-const stats = [
-  {
-    label: 'Total Procedures Allowed',
-    value: '3',
-    icon: CheckCircle,
-    color: 'var(--brand-green-dark)',
-  },
-  { label: 'Evaluated', value: '1', icon: CheckCircle, color: 'var(--brand-green-medium)' },
-  { label: 'In Progress', value: '2', icon: Clock, color: 'var(--brand-pink-dark)' },
-];
+type EvaluationData = {
+  overallScore: number | null;
+  maxScore: number | null;
+  competencyStatus: string | null;
+  evaluationDate: string | null;
+  evaluatorName: string | null;
+  feedback: string | null;
+  rubric: { criterion: string; score: number; maxScore: number; description: string }[];
+};
 
-const announcements = [
-  {
-    id: 1,
-    title: 'New Clinical Modules Available',
-    instructor: 'Dr. Sarah Mitchell',
-    role: 'Clinical Instructor',
-    date: 'April 12, 2026',
-    content:
-      'Exciting news! We have just released new clinical modules focusing on postpartum care and neonatal assessment.',
-    category: 'Academic',
-  },
-  {
-    id: 2,
-    title: 'Clinical Rotation Schedule Update',
-    instructor: 'Prof. Jennifer Lopez',
-    role: 'Lead Clinical Coordinator',
-    date: 'April 10, 2026',
-    content:
-      'Please note that the clinical rotation schedule for Week 6 has been updated. All students assigned to Labor & Delivery should report to the 3rd floor nurse station at 6:45 AM instead of 7:00 AM.',
-    category: 'Schedule',
-  },
-  {
-    id: 3,
-    title: 'Competency Assessment Reminder',
-    instructor: 'Dr. Maria Santos',
-    role: 'Clinical Instructor',
-    date: 'April 8, 2026',
-    content:
-      'Reminder: All students must complete their mid-term competency assessments by April 20th.',
-    category: 'Assessment',
-  },
-];
+type Procedure = {
+  id: string;
+  name: string;
+  category: string;
+  allowedBy: string | null;
+  allowedDate: string | null;
+  status: 'pending' | 'in_progress' | 'completed' | 'evaluated' | 'locked';
+  completedDate: string | null;
+  notes: string | null;
+  evaluation: EvaluationData | null;
+  resources: { type: 'file' | 'link'; name: string; url: string }[];
+};
+
+type DashboardAnnouncement = {
+  id: string;
+  title: string;
+  instructor: string;
+  role: string;
+  date: string;
+  content: string;
+  category: string;
+};
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 const categoryColors: Record<string, string> = {
   Academic: 'var(--brand-green-dark)',
@@ -192,13 +68,130 @@ const categoryColors: Record<string, string> = {
   Policy: 'var(--brand-green-dark)',
 };
 
-type Procedure = (typeof allowedProcedures)[0];
+const asArray = <T,>(v: T | T[] | null | undefined): T[] =>
+  !v ? [] : Array.isArray(v) ? v : [v];
+
+const fmt = (iso: string | null | undefined): string | null =>
+  iso
+    ? new Date(iso).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : null;
+
+// ── Component ──────────────────────────────────────────────────────────────
 
 export function StudentDashboard() {
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+
   const [selectedProcedure, setSelectedProcedure] = useState<Procedure | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
+  const [studentName, setStudentName] = useState('');
+
+  const [procedures, setProcedures] = useState<Procedure[]>([]);
+  const [announcements, setAnnouncements] = useState<DashboardAnnouncement[]>([]);
+  const [stats, setStats] = useState([
+    { label: 'Total Procedures Allowed', value: '–', icon: CheckCircle, color: 'var(--brand-green-dark)' },
+    { label: 'Evaluated', value: '–', icon: CheckCircle, color: 'var(--brand-green-medium)' },
+    { label: 'In Progress', value: '–', icon: Clock, color: 'var(--brand-pink-dark)' },
+  ]);
+
+  useEffect(() => {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, role')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.full_name) setStudentName(profile.full_name.split(' ')[0]);
+
+      // Fetch student_procedures with nested procedure + creator info
+      const { data: spRows } = await supabase
+        .from('student_procedures')
+        .select(`
+          id, status, notes, completed_at, created_at, procedure_id,
+          procedures(id, name, category, description, profiles!created_by(full_name))
+        `)
+        .eq('student_id', user.id)
+        .order('created_at', { ascending: false });
+
+      // Fetch evaluations separately (no direct FK from student_procedures → evaluations)
+      const { data: evalRows } = await supabase
+        .from('evaluations')
+        .select('procedure_id, overall_score, max_score, competency_status, feedback, evaluation_date, profiles!instructor_id(full_name)')
+        .eq('student_id', user.id);
+
+      const evalMap = new Map<string, EvaluationData>();
+      for (const e of (evalRows ?? []) as any[]) {
+        const instr = asArray(e.profiles)[0];
+        evalMap.set(e.procedure_id, {
+          overallScore: e.overall_score ?? null,
+          maxScore: e.max_score ?? null,
+          competencyStatus: e.competency_status ?? null,
+          evaluationDate: fmt(e.evaluation_date),
+          evaluatorName: instr?.full_name ?? null,
+          feedback: e.feedback ?? null,
+          rubric: [],
+        });
+      }
+
+      const mapped: Procedure[] = ((spRows ?? []) as any[]).map((sp) => {
+        const proc = asArray(sp.procedures)[0];
+        const author = asArray(proc?.profiles)[0];
+        return {
+          id: sp.id,
+          name: proc?.name ?? 'Unknown Procedure',
+          category: proc?.category ?? 'Uncategorized',
+          allowedBy: author?.full_name ?? null,
+          allowedDate: fmt(sp.created_at),
+          status: sp.status,
+          completedDate: fmt(sp.completed_at),
+          notes: sp.notes ?? null,
+          evaluation: evalMap.get(sp.procedure_id) ?? null,
+          resources: [],
+        };
+      });
+
+      setProcedures(mapped);
+      setStats([
+        { label: 'Total Procedures Allowed', value: String(mapped.length), icon: CheckCircle, color: 'var(--brand-green-dark)' },
+        { label: 'Evaluated', value: String(mapped.filter(p => p.status === 'evaluated').length), icon: CheckCircle, color: 'var(--brand-green-medium)' },
+        { label: 'In Progress', value: String(mapped.filter(p => p.status !== 'evaluated').length), icon: Clock, color: 'var(--brand-pink-dark)' },
+      ]);
+
+      // Fetch announcements
+      const role = profile?.role ?? 'student';
+      const { data: annRows } = await supabase
+        .from('announcements')
+        .select('id, title, content, category, created_at, profiles!announcements_created_by_fkey(full_name, role)')
+        .or(`target_role.eq.all,target_role.eq.${role}`)
+        .order('created_at', { ascending: false });
+
+      setAnnouncements(
+        ((annRows ?? []) as any[]).map((row) => {
+          const creator = asArray(row.profiles)[0];
+          return {
+            id: row.id,
+            title: row.title,
+            instructor: creator?.full_name ?? 'Maternix',
+            role: creator?.role ?? 'instructor',
+            date: fmt(row.created_at) ?? '',
+            content: row.content,
+            category: row.category,
+          };
+        })
+      );
+    }
+
+    load();
+  }, [supabase]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -243,7 +236,7 @@ export function StudentDashboard() {
                   <User className="w-4 h-4 text-white" />
                 </div>
                 <div className="text-sm">
-                  <div className="font-medium text-foreground">Emily Rodriguez</div>
+                  <div className="font-medium text-foreground">{studentName || 'Student'}</div>
                   <div className="text-muted-foreground text-xs">Nursing Student</div>
                 </div>
               </button>
@@ -259,7 +252,10 @@ export function StudentDashboard() {
                     <span className="text-foreground">Profile Settings</span>
                   </Link>
                   <button
-                    onClick={() => router.push('/')}
+                    onClick={async () => {
+                      await supabase.auth.signOut();
+                      router.push('/');
+                    }}
                     className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors border-t border-border"
                   >
                     <LogOut className="w-4 h-4" style={{ color: 'var(--brand-pink-dark)' }} />
@@ -280,7 +276,7 @@ export function StudentDashboard() {
           transition={{ duration: 0.5 }}
           className="mb-12"
         >
-          <h1 className="text-5xl font-bold text-foreground mb-3">Welcome back, Emily</h1>
+          <h1 className="text-5xl font-bold text-foreground mb-3">Welcome back, {studentName || 'Student'}</h1>
           <p className="text-xl text-muted-foreground">
             Track your clinical progress and view procedures approved by your instructors
           </p>
@@ -328,39 +324,45 @@ export function StudentDashboard() {
               <Bell className="w-8 h-8" style={{ color: 'var(--brand-pink-dark)' }} />
               <h2 className="text-3xl font-bold text-foreground">Announcements</h2>
             </div>
-            <div className="space-y-6">
-              {announcements.map((announcement, index) => (
-                <motion.article
-                  key={announcement.id}
-                  initial={{ y: 30, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
-                  className="bg-white border border-border rounded-2xl p-8 hover:shadow-lg transition-all"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-2xl font-bold text-foreground mb-2">
-                        {announcement.title}
-                      </h3>
-                      <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                        <span className="font-medium text-foreground">{announcement.instructor}</span>
-                        <span>•</span>
-                        <span>{announcement.role}</span>
-                        <span>•</span>
-                        <span>{announcement.date}</span>
+            {announcements.length === 0 ? (
+              <div className="bg-white border border-border rounded-2xl p-8 text-center text-muted-foreground">
+                No announcements available.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {announcements.map((announcement, index) => (
+                  <motion.article
+                    key={announcement.id}
+                    initial={{ y: 30, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                    className="bg-white border border-border rounded-2xl p-8 hover:shadow-lg transition-all"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h3 className="text-2xl font-bold text-foreground mb-2">
+                          {announcement.title}
+                        </h3>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                          <span className="font-medium text-foreground">{announcement.instructor}</span>
+                          <span>•</span>
+                          <span>{announcement.role}</span>
+                          <span>•</span>
+                          <span>{announcement.date}</span>
+                        </div>
                       </div>
+                      <span
+                        className="px-3 py-1 rounded-full text-sm text-white"
+                        style={{ backgroundColor: categoryColors[announcement.category] ?? 'var(--brand-green-dark)' }}
+                      >
+                        {announcement.category}
+                      </span>
                     </div>
-                    <span
-                      className="px-3 py-1 rounded-full text-sm text-white"
-                      style={{ backgroundColor: categoryColors[announcement.category] }}
-                    >
-                      {announcement.category}
-                    </span>
-                  </div>
-                  <p className="text-foreground leading-relaxed">{announcement.content}</p>
-                </motion.article>
-              ))}
-            </div>
+                    <p className="text-foreground leading-relaxed">{announcement.content}</p>
+                  </motion.article>
+                ))}
+              </div>
+            )}
           </motion.div>
         ) : (
           <motion.div
@@ -376,151 +378,159 @@ export function StudentDashboard() {
               Procedures you are authorized to perform by your clinical instructors
             </p>
 
-            <div className="space-y-4">
-              {allowedProcedures.map((procedure, index) => (
-                <motion.div
-                  key={procedure.id}
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
-                  className={`bg-white border-2 border-border rounded-xl p-6 transition-all ${
-                    procedure.status === 'locked'
-                      ? 'opacity-60 cursor-not-allowed'
-                      : 'hover:shadow-lg cursor-pointer'
-                  }`}
-                  style={{
-                    borderLeftWidth: '6px',
-                    borderLeftColor:
+            {procedures.length === 0 ? (
+              <div className="bg-white border border-border rounded-2xl p-12 text-center text-muted-foreground">
+                No procedures assigned yet. Your instructor will unlock procedures for you.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {procedures.map((procedure, index) => (
+                  <motion.div
+                    key={procedure.id}
+                    initial={{ x: -20, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                    className={`bg-white border-2 border-border rounded-xl p-6 transition-all ${
                       procedure.status === 'locked'
-                        ? '#9CA3AF'
-                        : procedure.status === 'completed' || procedure.status === 'evaluated'
-                        ? 'var(--brand-green-dark)'
-                        : 'var(--brand-pink-dark)',
-                  }}
-                  onClick={() => procedure.status !== 'locked' && setSelectedProcedure(procedure)}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div>
-                      <h4
-                        className={`text-xl font-bold mb-1 ${
-                          procedure.status === 'locked'
-                            ? 'text-muted-foreground'
-                            : 'text-foreground'
-                        }`}
-                      >
-                        {procedure.name}
-                      </h4>
-                      <span
-                        className="inline-block px-3 py-1 rounded-full text-xs text-white"
-                        style={{
-                          backgroundColor:
+                        ? 'opacity-60 cursor-not-allowed'
+                        : 'hover:shadow-lg cursor-pointer'
+                    }`}
+                    style={{
+                      borderLeftWidth: '6px',
+                      borderLeftColor:
+                        procedure.status === 'locked'
+                          ? '#9CA3AF'
+                          : procedure.status === 'completed' || procedure.status === 'evaluated'
+                          ? 'var(--brand-green-dark)'
+                          : 'var(--brand-pink-dark)',
+                    }}
+                    onClick={() => procedure.status !== 'locked' && setSelectedProcedure(procedure)}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h4
+                          className={`text-xl font-bold mb-1 ${
                             procedure.status === 'locked'
-                              ? '#9CA3AF'
-                              : 'var(--brand-green-medium)',
-                        }}
-                      >
-                        {procedure.category}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {procedure.resources.length > 0 && procedure.status !== 'locked' && (
+                              ? 'text-muted-foreground'
+                              : 'text-foreground'
+                          }`}
+                        >
+                          {procedure.name}
+                        </h4>
                         <span
-                          className="px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1"
+                          className="inline-block px-3 py-1 rounded-full text-xs text-white"
                           style={{
-                            backgroundColor: 'rgba(69,117,88,0.12)',
-                            color: 'var(--brand-green-dark)',
+                            backgroundColor:
+                              procedure.status === 'locked'
+                                ? '#9CA3AF'
+                                : 'var(--brand-green-medium)',
                           }}
                         >
-                          <FileText className="w-3 h-3" />
-                          {procedure.resources.length}
+                          {procedure.category}
                         </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {procedure.resources.length > 0 && procedure.status !== 'locked' && (
+                          <span
+                            className="px-3 py-1 rounded-lg text-xs font-medium flex items-center gap-1"
+                            style={{
+                              backgroundColor: 'rgba(69,117,88,0.12)',
+                              color: 'var(--brand-green-dark)',
+                            }}
+                          >
+                            <FileText className="w-3 h-3" />
+                            {procedure.resources.length}
+                          </span>
+                        )}
+                        <span
+                          className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 text-white"
+                          style={{
+                            backgroundColor:
+                              procedure.status === 'locked'
+                                ? '#9CA3AF'
+                                : procedure.status === 'completed' || procedure.status === 'evaluated'
+                                ? 'var(--brand-green-dark)'
+                                : 'var(--brand-pink-dark)',
+                          }}
+                        >
+                          {procedure.status === 'locked' ? (
+                            <><Lock className="w-4 h-4" /> Locked</>
+                          ) : procedure.status === 'evaluated' ? (
+                            <><CheckCircle className="w-4 h-4" /> Evaluated</>
+                          ) : procedure.status === 'completed' ? (
+                            <><CheckCircle className="w-4 h-4" /> Completed</>
+                          ) : (
+                            <><Clock className="w-4 h-4" /> In Progress</>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 text-sm mb-3">
+                      <div>
+                        <span className="text-muted-foreground">
+                          {procedure.status === 'locked' ? 'Instructor:' : 'Allowed by:'}
+                        </span>
+                        <span
+                          className={`ml-2 font-medium ${
+                            procedure.status === 'locked' ? 'text-muted-foreground' : 'text-foreground'
+                          }`}
+                        >
+                          {procedure.allowedBy ?? '—'}
+                        </span>
+                      </div>
+                      {procedure.status !== 'locked' && (
+                        <div>
+                          <span className="text-muted-foreground">
+                            {procedure.status === 'evaluated'
+                              ? 'Evaluated:'
+                              : procedure.status === 'completed'
+                              ? 'Completed:'
+                              : 'Date Allowed:'}
+                          </span>
+                          <span className="ml-2 font-medium text-foreground">
+                            {procedure.status === 'evaluated'
+                              ? procedure.evaluation?.evaluationDate
+                              : procedure.status === 'completed'
+                              ? procedure.completedDate
+                              : procedure.allowedDate}
+                          </span>
+                        </div>
                       )}
-                      <span
-                        className="px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 text-white"
+                    </div>
+
+                    {(procedure.notes || procedure.evaluation?.feedback) && (
+                      <div
+                        className="p-3 rounded-lg"
                         style={{
                           backgroundColor:
                             procedure.status === 'locked'
-                              ? '#9CA3AF'
+                              ? '#F3F4F6'
                               : procedure.status === 'completed' || procedure.status === 'evaluated'
-                              ? 'var(--brand-green-dark)'
-                              : 'var(--brand-pink-dark)',
+                              ? '#d4edda'
+                              : 'var(--brand-pink-light)',
                         }}
                       >
-                        {procedure.status === 'locked' ? (
-                          <><Lock className="w-4 h-4" /> Locked</>
-                        ) : procedure.status === 'evaluated' ? (
-                          <><CheckCircle className="w-4 h-4" /> Evaluated</>
-                        ) : procedure.status === 'completed' ? (
-                          <><CheckCircle className="w-4 h-4" /> Completed</>
-                        ) : (
-                          <><Clock className="w-4 h-4" /> In Progress</>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4 text-sm mb-3">
-                    <div>
-                      <span className="text-muted-foreground">
-                        {procedure.status === 'locked' ? 'Instructor:' : 'Allowed by:'}
-                      </span>
-                      <span
-                        className={`ml-2 font-medium ${
-                          procedure.status === 'locked' ? 'text-muted-foreground' : 'text-foreground'
-                        }`}
-                      >
-                        {procedure.allowedBy}
-                      </span>
-                    </div>
-                    {procedure.status !== 'locked' && (
-                      <div>
-                        <span className="text-muted-foreground">
+                        <p
+                          className={`text-sm ${
+                            procedure.status === 'locked' ? 'text-muted-foreground' : 'text-foreground'
+                          }`}
+                        >
+                          <span className="font-medium">
+                            {procedure.status === 'evaluated'
+                              ? 'Evaluator Feedback:'
+                              : 'Instructor Notes:'}
+                          </span>{' '}
                           {procedure.status === 'evaluated'
-                            ? 'Evaluated:'
-                            : procedure.status === 'completed'
-                            ? 'Completed:'
-                            : 'Date Allowed:'}
-                        </span>
-                        <span className="ml-2 font-medium text-foreground">
-                          {procedure.status === 'evaluated'
-                            ? procedure.evaluation?.evaluationDate
-                            : procedure.status === 'completed'
-                            ? procedure.completedDate
-                            : procedure.allowedDate}
-                        </span>
+                            ? procedure.evaluation?.feedback
+                            : procedure.notes}
+                        </p>
                       </div>
                     )}
-                  </div>
-
-                  <div
-                    className="p-3 rounded-lg"
-                    style={{
-                      backgroundColor:
-                        procedure.status === 'locked'
-                          ? '#F3F4F6'
-                          : procedure.status === 'completed' || procedure.status === 'evaluated'
-                          ? '#d4edda'
-                          : 'var(--brand-pink-light)',
-                    }}
-                  >
-                    <p
-                      className={`text-sm ${
-                        procedure.status === 'locked' ? 'text-muted-foreground' : 'text-foreground'
-                      }`}
-                    >
-                      <span className="font-medium">
-                        {procedure.status === 'evaluated'
-                          ? 'Evaluator Feedback:'
-                          : 'Instructor Notes:'}
-                      </span>{' '}
-                      {procedure.status === 'evaluated'
-                        ? procedure.evaluation?.feedback
-                        : procedure.notes}
-                    </p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </div>
@@ -580,18 +590,18 @@ export function StudentDashboard() {
               <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b border-border">
                 <div>
                   <div className="text-sm text-muted-foreground mb-1">Allowed by</div>
-                  <div className="font-medium text-foreground">{selectedProcedure.allowedBy}</div>
+                  <div className="font-medium text-foreground">{selectedProcedure.allowedBy ?? '—'}</div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground mb-1">Date Allowed</div>
-                  <div className="font-medium text-foreground">{selectedProcedure.allowedDate}</div>
+                  <div className="font-medium text-foreground">{selectedProcedure.allowedDate ?? '—'}</div>
                 </div>
                 {(selectedProcedure.status === 'completed' ||
                   selectedProcedure.status === 'evaluated') && (
                   <div>
                     <div className="text-sm text-muted-foreground mb-1">Completed Date</div>
                     <div className="font-medium text-foreground">
-                      {selectedProcedure.completedDate}
+                      {selectedProcedure.completedDate ?? '—'}
                     </div>
                   </div>
                 )}
@@ -599,35 +609,37 @@ export function StudentDashboard() {
                   <div>
                     <div className="text-sm text-muted-foreground mb-1">Evaluation Date</div>
                     <div className="font-medium text-foreground">
-                      {selectedProcedure.evaluation?.evaluationDate}
+                      {selectedProcedure.evaluation?.evaluationDate ?? '—'}
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="mb-6">
-                <h4 className="font-medium text-foreground mb-2">
-                  {selectedProcedure.status === 'evaluated'
-                    ? 'Evaluator Feedback'
-                    : 'Instructor Notes'}
-                </h4>
-                <div
-                  className="p-4 rounded-lg"
-                  style={{
-                    backgroundColor:
-                      selectedProcedure.status === 'completed' ||
-                      selectedProcedure.status === 'evaluated'
-                        ? '#d4edda'
-                        : 'var(--brand-pink-light)',
-                  }}
-                >
-                  <p className="text-foreground">
+              {(selectedProcedure.notes || selectedProcedure.evaluation?.feedback) && (
+                <div className="mb-6">
+                  <h4 className="font-medium text-foreground mb-2">
                     {selectedProcedure.status === 'evaluated'
-                      ? selectedProcedure.evaluation?.feedback
-                      : selectedProcedure.notes}
-                  </p>
+                      ? 'Evaluator Feedback'
+                      : 'Instructor Notes'}
+                  </h4>
+                  <div
+                    className="p-4 rounded-lg"
+                    style={{
+                      backgroundColor:
+                        selectedProcedure.status === 'completed' ||
+                        selectedProcedure.status === 'evaluated'
+                          ? '#d4edda'
+                          : 'var(--brand-pink-light)',
+                    }}
+                  >
+                    <p className="text-foreground">
+                      {selectedProcedure.status === 'evaluated'
+                        ? selectedProcedure.evaluation?.feedback
+                        : selectedProcedure.notes}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {selectedProcedure.status === 'evaluated' && selectedProcedure.evaluation && (
                 <div className="mb-6 border-t border-border pt-6">
@@ -645,8 +657,8 @@ export function StudentDashboard() {
                         className="text-4xl font-bold"
                         style={{ color: 'var(--brand-green-dark)' }}
                       >
-                        {selectedProcedure.evaluation.overallScore}/
-                        {selectedProcedure.evaluation.maxScore}
+                        {selectedProcedure.evaluation.overallScore ?? '–'}/
+                        {selectedProcedure.evaluation.maxScore ?? '–'}
                       </div>
                     </div>
                     <div
@@ -663,48 +675,50 @@ export function StudentDashboard() {
                           style={{ color: 'var(--brand-green-medium)' }}
                         />
                         <div className="text-2xl font-bold text-foreground">
-                          {selectedProcedure.evaluation.competencyStatus}
+                          {selectedProcedure.evaluation.competencyStatus ?? '—'}
                         </div>
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-3">
-                    {selectedProcedure.evaluation.rubric.map((item, index) => (
-                      <div
-                        key={index}
-                        className="border border-border rounded-lg p-4 hover:shadow-md transition-all"
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <div className="font-medium text-foreground mb-1">{item.criterion}</div>
-                            <div className="text-sm text-muted-foreground">{item.description}</div>
-                          </div>
-                          <div className="text-right ml-4">
-                            <div
-                              className="text-2xl font-bold"
-                              style={{ color: 'var(--brand-green-dark)' }}
-                            >
-                              {item.score}/{item.maxScore}
+                  {selectedProcedure.evaluation.rubric.length > 0 && (
+                    <div className="space-y-3">
+                      {selectedProcedure.evaluation.rubric.map((item, index) => (
+                        <div
+                          key={index}
+                          className="border border-border rounded-lg p-4 hover:shadow-md transition-all"
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <div className="font-medium text-foreground mb-1">{item.criterion}</div>
+                              <div className="text-sm text-muted-foreground">{item.description}</div>
+                            </div>
+                            <div className="text-right ml-4">
+                              <div
+                                className="text-2xl font-bold"
+                                style={{ color: 'var(--brand-green-dark)' }}
+                              >
+                                {item.score}/{item.maxScore}
+                              </div>
                             </div>
                           </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
+                            <div
+                              className="h-2 rounded-full transition-all"
+                              style={{
+                                width: `${(item.score / item.maxScore) * 100}%`,
+                                backgroundColor:
+                                  item.score / item.maxScore >= 0.9
+                                    ? 'var(--brand-green-dark)'
+                                    : item.score / item.maxScore >= 0.7
+                                    ? 'var(--brand-green-medium)'
+                                    : 'var(--brand-pink-dark)',
+                              }}
+                            />
+                          </div>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-3">
-                          <div
-                            className="h-2 rounded-full transition-all"
-                            style={{
-                              width: `${(item.score / item.maxScore) * 100}%`,
-                              backgroundColor:
-                                item.score / item.maxScore >= 0.9
-                                  ? 'var(--brand-green-dark)'
-                                  : item.score / item.maxScore >= 0.7
-                                  ? 'var(--brand-green-medium)'
-                                  : 'var(--brand-pink-dark)',
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

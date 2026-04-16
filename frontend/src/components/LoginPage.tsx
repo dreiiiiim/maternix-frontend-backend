@@ -6,23 +6,65 @@ import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
+import { createClient } from '@/lib/supabase/client';
 
 export function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [userType, setUserType] = useState<'student' | 'instructor' | 'admin'>('student');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    sessionStorage.removeItem('announcementPopupShown');
-    if (userType === 'instructor') {
-      router.push('/instructor/dashboard');
-    } else if (userType === 'admin') {
-      router.push('/admin/dashboard');
-    } else {
-      router.push('/student/dashboard');
+    setError('');
+    setIsLoading(true);
+
+    const supabase = createClient();
+
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError || !data.user) {
+      setError(authError?.message ?? 'Invalid email or password.');
+      setIsLoading(false);
+      return;
     }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('role, status')
+      .eq('id', data.user.id)
+      .single();
+
+    if (profileError || !profile) {
+      setError(
+        profileError?.code === 'PGRST116'
+          ? 'No profile found for this account. Please contact support.'
+          : `Profile error: ${profileError?.message ?? 'Unknown error'}`
+      );
+      await supabase.auth.signOut();
+      setIsLoading(false);
+      return;
+    }
+
+    if (profile.status === 'pending') {
+      router.push('/pending-approval');
+      return;
+    }
+
+    if (profile.status === 'rejected') {
+      setError('Your account registration was not approved. Please contact your institution.');
+      await supabase.auth.signOut();
+      setIsLoading(false);
+      return;
+    }
+
+    // approved — route to role dashboard
+    sessionStorage.removeItem('announcementPopupShown');
+    router.push(`/${profile.role}/dashboard`);
   };
 
   return (
@@ -47,29 +89,13 @@ export function LoginPage() {
           <h1 className="text-4xl font-bold text-foreground mb-2">Welcome Back</h1>
           <p className="text-muted-foreground mb-8">Sign in to continue your clinical journey</p>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm mb-3 text-foreground">I am a</label>
-              <div className="flex gap-3">
-                {(['student', 'instructor', 'admin'] as const).map((type) => (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => setUserType(type)}
-                    className="flex-1 px-4 py-3 rounded-lg border-2 transition-all"
-                    style={{
-                      borderColor: userType === type ? 'var(--brand-green-dark)' : 'var(--border)',
-                      backgroundColor:
-                        userType === type ? 'rgba(69,117,88,0.06)' : 'transparent',
-                      color: userType === type ? 'var(--brand-green-dark)' : 'var(--foreground)',
-                    }}
-                  >
-                    {type === 'student' ? 'Nursing Student' : type === 'instructor' ? 'Clinical Instructor' : 'Admin'}
-                  </button>
-                ))}
-              </div>
+          {error && (
+            <div className="mb-5 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              {error}
             </div>
+          )}
 
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm mb-2 text-foreground">
                 Email Address
@@ -109,27 +135,28 @@ export function LoginPage() {
                 />
                 <span className="text-sm text-muted-foreground">Remember me</span>
               </label>
-              <a
-                href="#"
+              <Link
+                href="/forgot-password"
                 className="text-sm transition-colors"
                 style={{ color: 'var(--brand-green-dark)' }}
               >
                 Forgot password?
-              </a>
+              </Link>
             </div>
 
             <button
               type="submit"
-              className="w-full py-3 text-white rounded-lg transition-all hover:scale-105"
+              disabled={isLoading}
+              className="w-full py-3 text-white rounded-lg transition-all hover:scale-105 disabled:opacity-60 disabled:hover:scale-100"
               style={{ backgroundColor: 'var(--brand-pink-dark)' }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.backgroundColor = 'var(--brand-green-dark)')
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.backgroundColor = 'var(--brand-pink-dark)')
-              }
+              onMouseEnter={(e) => {
+                if (!isLoading) e.currentTarget.style.backgroundColor = 'var(--brand-green-dark)'
+              }}
+              onMouseLeave={(e) => {
+                if (!isLoading) e.currentTarget.style.backgroundColor = 'var(--brand-pink-dark)'
+              }}
             >
-              Sign In
+              {isLoading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
 

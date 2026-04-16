@@ -1,54 +1,110 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Bell } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { X, Bell } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
-const recentAnnouncements = [
-  {
-    id: 1,
-    title: 'New Clinical Modules Available',
-    instructor: 'Dr. Sarah Mitchell',
-    date: 'April 12, 2026',
-    preview:
-      'Exciting news! We have just released new clinical modules focusing on postpartum care and neonatal assessment.',
-    category: 'Academic',
-  },
-  {
-    id: 2,
-    title: 'Clinical Rotation Schedule Update',
-    instructor: 'Prof. Jennifer Lopez',
-    date: 'April 10, 2026',
-    preview:
-      'Please note that the clinical rotation schedule for Week 6 has been updated.',
-    category: 'Schedule',
-  },
-];
-
-interface AnnouncementPopupProps {
-  onViewAll: () => void;
+type PopupAnnouncement = {
+  id: string
+  title: string
+  instructor: string
+  date: string
+  preview: string
+  category: string
 }
 
+type AnnouncementRow = {
+  id: string
+  title: string
+  content: string
+  category: string
+  created_at: string
+  profiles:
+    | {
+        full_name: string | null
+      }
+    | Array<{
+        full_name: string | null
+      }>
+    | null
+}
+
+interface AnnouncementPopupProps {
+  onViewAll: () => void
+}
+
+const asArray = <T,>(value: T | T[] | null | undefined): T[] =>
+  !value ? [] : Array.isArray(value) ? value : [value]
+
 export function AnnouncementPopup({ onViewAll }: AnnouncementPopupProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const supabase = useMemo(() => createClient(), [])
+  const [isOpen, setIsOpen] = useState(false)
+  const [recentAnnouncements, setRecentAnnouncements] = useState<PopupAnnouncement[]>([])
 
   useEffect(() => {
-    const hasShownPopup = sessionStorage.getItem('announcementPopupShown');
-    if (!hasShownPopup) {
-      const timer = setTimeout(() => {
-        setIsOpen(true);
-        sessionStorage.setItem('announcementPopupShown', 'true');
-      }, 500);
-      return () => clearTimeout(timer);
+    const hasShown = sessionStorage.getItem('announcementPopupShown')
+    if (hasShown) return
+
+    async function fetchAnnouncements() {
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user) return
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single()
+
+        if (!profile?.role) return
+
+        const { data } = await supabase
+          .from('announcements')
+          .select('id, title, content, category, created_at, profiles!announcements_created_by_fkey(full_name)')
+          .or(`target_role.eq.all,target_role.eq.${profile.role}`)
+          .order('created_at', { ascending: false })
+          .limit(2)
+
+        const mapped = ((data ?? []) as AnnouncementRow[]).map((row) => {
+          const creator = asArray(row.profiles)[0]
+          return {
+            id: row.id,
+            title: row.title,
+            instructor: creator?.full_name ?? 'Maternix',
+            date: new Date(row.created_at).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            }),
+            preview: row.content.length > 120 ? `${row.content.slice(0, 120)}...` : row.content,
+            category: row.category,
+          }
+        })
+
+        if (mapped.length) {
+          setRecentAnnouncements(mapped)
+          setTimeout(() => {
+            setIsOpen(true)
+            sessionStorage.setItem('announcementPopupShown', 'true')
+          }, 500)
+        }
+      } catch {
+        // Graceful no-popup fallback for session/network issues.
+      }
     }
-  }, []);
+
+    fetchAnnouncements()
+  }, [supabase])
 
   const handleViewAll = () => {
-    setIsOpen(false);
-    onViewAll();
-  };
+    setIsOpen(false)
+    onViewAll()
+  }
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return (
     <AnimatePresence>
@@ -60,16 +116,12 @@ export function AnnouncementPopup({ onViewAll }: AnnouncementPopupProps) {
           transition={{ duration: 0.3 }}
           className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl"
         >
-          {/* Header */}
           <div
             className="p-6 border-b border-border flex items-center justify-between"
             style={{ background: 'linear-gradient(to right, var(--brand-pink-light), white)' }}
           >
             <div className="flex items-center gap-3">
-              <div
-                className="w-12 h-12 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: 'var(--brand-pink-dark)' }}
-              >
+              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--brand-pink-dark)' }}>
                 <Bell className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -77,15 +129,11 @@ export function AnnouncementPopup({ onViewAll }: AnnouncementPopupProps) {
                 <p className="text-sm text-muted-foreground">Updates from your instructors</p>
               </div>
             </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="p-2 hover:bg-white/50 rounded-lg transition-colors"
-            >
+            <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white/50 rounded-lg transition-colors">
               <X className="w-6 h-6 text-muted-foreground" />
             </button>
           </div>
 
-          {/* Content */}
           <div className="p-6 max-h-[60vh] overflow-y-auto">
             <div className="space-y-4">
               {recentAnnouncements.map((announcement, index) => (
@@ -95,17 +143,10 @@ export function AnnouncementPopup({ onViewAll }: AnnouncementPopupProps) {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.3, delay: index * 0.1 }}
                   className="p-4 rounded-xl border-2 border-border hover:shadow-md transition-all"
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.borderColor = 'var(--brand-pink-medium)')
-                  }
-                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = '')}
                 >
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="text-lg font-bold text-foreground">{announcement.title}</h3>
-                    <span
-                      className="px-3 py-1 rounded-full text-xs text-white"
-                      style={{ backgroundColor: 'var(--brand-green-dark)' }}
-                    >
+                    <span className="px-3 py-1 rounded-full text-xs text-white" style={{ backgroundColor: 'var(--brand-green-dark)' }}>
                       {announcement.category}
                     </span>
                   </div>
@@ -118,30 +159,16 @@ export function AnnouncementPopup({ onViewAll }: AnnouncementPopupProps) {
             </div>
           </div>
 
-          {/* Footer */}
           <div className="p-6 border-t border-border bg-gray-50 flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               {recentAnnouncements.length} new announcement
               {recentAnnouncements.length > 1 ? 's' : ''}
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setIsOpen(false)}
-                className="px-6 py-2 border border-border rounded-lg hover:bg-gray-100 transition-colors"
-              >
+              <button onClick={() => setIsOpen(false)} className="px-6 py-2 border border-border rounded-lg hover:bg-gray-100 transition-colors">
                 Close
               </button>
-              <button
-                onClick={handleViewAll}
-                className="px-6 py-2 text-white rounded-lg transition-all hover:scale-105"
-                style={{ backgroundColor: 'var(--brand-green-dark)' }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.backgroundColor = 'var(--brand-green-medium)')
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.backgroundColor = 'var(--brand-green-dark)')
-                }
-              >
+              <button onClick={handleViewAll} className="px-6 py-2 text-white rounded-lg transition-all hover:scale-105" style={{ backgroundColor: 'var(--brand-green-dark)' }}>
                 View All
               </button>
             </div>
@@ -149,5 +176,5 @@ export function AnnouncementPopup({ onViewAll }: AnnouncementPopupProps) {
         </motion.div>
       </div>
     </AnimatePresence>
-  );
+  )
 }
