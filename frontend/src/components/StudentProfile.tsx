@@ -18,7 +18,8 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 
 type ProfileForm = {
-  fullName: string
+  firstName: string
+  lastName: string
   email: string
   phone: string
   enrollmentDate: string
@@ -39,7 +40,8 @@ export function StudentProfile() {
   const [photoFile, setPhotoFile] = useState<File | null>(null)
 
   const [formData, setFormData] = useState<ProfileForm>({
-    fullName: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     enrollmentDate: '',
@@ -67,7 +69,7 @@ export function StudentProfile() {
 
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('full_name, email, phone_number, avatar_url, created_at')
+        .select('first_name, last_name, full_name, email, phone_number, avatar_url, created_at')
         .eq('id', user.id)
         .single()
 
@@ -93,7 +95,8 @@ export function StudentProfile() {
 
       setProfilePhoto(profile.avatar_url ?? null)
       setFormData({
-        fullName: profile.full_name,
+        firstName: profile.first_name ?? '',
+        lastName: profile.last_name ?? '',
         email: profile.email,
         phone: profile.phone_number ?? '',
         enrollmentDate: new Date(profile.created_at).toLocaleDateString('en-US', {
@@ -139,7 +142,9 @@ export function StudentProfile() {
     const { error: updateError } = await supabase
       .from('profiles')
       .update({
-        full_name: formData.fullName,
+        first_name: formData.firstName,
+        last_name: formData.lastName,
+        full_name: `${formData.firstName} ${formData.lastName}`.trim(),
         phone_number: formData.phone,
         avatar_url: avatarUrl,
       })
@@ -165,14 +170,11 @@ export function StudentProfile() {
     setProfilePhoto(URL.createObjectURL(file))
   }
 
-  const getInitials = () =>
-    formData.fullName
-      .split(' ')
-      .filter(Boolean)
-      .map((part) => part[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
+  const getInitials = () => {
+    const fn = formData.firstName[0] || ''
+    const ln = formData.lastName[0] || ''
+    return (fn + ln).toUpperCase() || 'ST'
+  }
 
   if (loading) {
     return (
@@ -211,7 +213,7 @@ export function StudentProfile() {
                   <User className="w-4 h-4 text-white" />
                 </div>
                 <div className="text-sm">
-                  <div className="font-medium text-foreground">{formData.fullName || 'Student'}</div>
+                  <div className="font-medium text-foreground">{formData.firstName} {formData.lastName}</div>
                   <div className="text-muted-foreground text-xs">Nursing Student</div>
                 </div>
               </div>
@@ -279,7 +281,7 @@ export function StudentProfile() {
               )}
             </div>
             <div className="flex-1">
-              <h2 className="text-2xl font-bold text-foreground mb-1">{formData.fullName}</h2>
+              <h2 className="text-2xl font-bold text-foreground mb-1">{formData.firstName} {formData.lastName}</h2>
               <p className="text-muted-foreground mb-3">Nursing Student • {formData.studentId}</p>
               {isEditing && (
                 <label
@@ -301,17 +303,32 @@ export function StudentProfile() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium mb-2 text-foreground flex items-center gap-2">
-                      <User className="w-4 h-4" /> Full Name
+                      <User className="w-4 h-4" /> First Name
                     </label>
                     {isEditing ? (
                       <input
                         type="text"
-                        value={formData.fullName}
-                        onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                        value={formData.firstName}
+                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                         className="w-full px-4 py-3 rounded-lg border border-border bg-input-background focus:outline-none focus:ring-2"
                       />
                     ) : (
-                      <div className="px-4 py-3 rounded-lg bg-gray-50 text-foreground">{formData.fullName}</div>
+                      <div className="px-4 py-3 rounded-lg bg-gray-50 text-foreground">{formData.firstName}</div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-foreground flex items-center gap-2">
+                      <User className="w-4 h-4" /> Last Name
+                    </label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={formData.lastName}
+                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                        className="w-full px-4 py-3 rounded-lg border border-border bg-input-background focus:outline-none focus:ring-2"
+                      />
+                    ) : (
+                      <div className="px-4 py-3 rounded-lg bg-gray-50 text-foreground">{formData.lastName}</div>
                     )}
                   </div>
                   <div>

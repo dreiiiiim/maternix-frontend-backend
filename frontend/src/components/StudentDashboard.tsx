@@ -106,18 +106,18 @@ export function StudentDashboard() {
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('full_name, role')
+        .select('first_name, last_name, role')
         .eq('id', user.id)
         .single();
 
-      if (profile?.full_name) setStudentName(profile.full_name.split(' ')[0]);
+      if (profile?.first_name) setStudentName(profile.first_name);
 
       // Fetch student_procedures with nested procedure + creator info
       const { data: spRows } = await supabase
         .from('student_procedures')
         .select(`
           id, status, notes, completed_at, created_at, procedure_id,
-          procedures(id, name, category, description, profiles!created_by(full_name))
+          procedures(id, name, category, description, profiles!created_by(first_name, last_name))
         `)
         .eq('student_id', user.id)
         .order('created_at', { ascending: false });
@@ -125,18 +125,19 @@ export function StudentDashboard() {
       // Fetch evaluations separately (no direct FK from student_procedures → evaluations)
       const { data: evalRows } = await supabase
         .from('evaluations')
-        .select('procedure_id, overall_score, max_score, competency_status, feedback, evaluation_date, profiles!instructor_id(full_name)')
+        .select('procedure_id, overall_score, max_score, competency_status, feedback, evaluation_date, profiles!instructor_id(first_name, last_name)')
         .eq('student_id', user.id);
 
       const evalMap = new Map<string, EvaluationData>();
       for (const e of (evalRows ?? []) as any[]) {
         const instr = asArray(e.profiles)[0];
+        const instrName = instr ? `${instr.first_name} ${instr.last_name}`.trim() : null;
         evalMap.set(e.procedure_id, {
           overallScore: e.overall_score ?? null,
           maxScore: e.max_score ?? null,
           competencyStatus: e.competency_status ?? null,
           evaluationDate: fmt(e.evaluation_date),
-          evaluatorName: instr?.full_name ?? null,
+          evaluatorName: instrName,
           feedback: e.feedback ?? null,
           rubric: [],
         });
@@ -145,11 +146,12 @@ export function StudentDashboard() {
       const mapped: Procedure[] = ((spRows ?? []) as any[]).map((sp) => {
         const proc = asArray(sp.procedures)[0];
         const author = asArray(proc?.profiles)[0];
+        const authorName = author ? `${author.first_name} ${author.last_name}`.trim() : null;
         return {
           id: sp.id,
           name: proc?.name ?? 'Unknown Procedure',
           category: proc?.category ?? 'Uncategorized',
-          allowedBy: author?.full_name ?? null,
+          allowedBy: authorName,
           allowedDate: fmt(sp.created_at),
           status: sp.status,
           completedDate: fmt(sp.completed_at),
@@ -170,17 +172,18 @@ export function StudentDashboard() {
       const role = profile?.role ?? 'student';
       const { data: annRows } = await supabase
         .from('announcements')
-        .select('id, title, content, category, created_at, profiles!announcements_created_by_fkey(full_name, role)')
+        .select('id, title, content, category, created_at, profiles!announcements_created_by_fkey(first_name, last_name, role)')
         .or(`target_role.eq.all,target_role.eq.${role}`)
         .order('created_at', { ascending: false });
 
       setAnnouncements(
         ((annRows ?? []) as any[]).map((row) => {
           const creator = asArray(row.profiles)[0];
+          const creatorName = creator ? `${creator.first_name} ${creator.last_name}`.trim() : 'Maternix';
           return {
             id: row.id,
             title: row.title,
-            instructor: creator?.full_name ?? 'Maternix',
+            instructor: creatorName,
             role: creator?.role ?? 'instructor',
             date: fmt(row.created_at) ?? '',
             content: row.content,

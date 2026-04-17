@@ -79,7 +79,7 @@ export function ProcedureManagement() {
 
     const { data: secData, error: secErr } = await supabase
       .from('sections')
-      .select('id,name,students(id,student_no,profiles(full_name,email,phone_number))')
+      .select('id,name,students(id,student_no,profiles(first_name,last_name,email,phone_number))')
       .eq('instructor_id', user.id)
       .order('name')
     if (secErr) {
@@ -95,8 +95,8 @@ export function ProcedureManagement() {
         id: string
         student_no: string
         profiles:
-          | { full_name: string | null; email: string | null; phone_number: string | null }
-          | Array<{ full_name: string | null; email: string | null; phone_number: string | null }>
+          | { first_name: string | null; last_name: string | null; email: string | null; phone_number: string | null }
+          | Array<{ first_name: string | null; last_name: string | null; email: string | null; phone_number: string | null }>
           | null
       }> | null
     }>).map((section) => ({
@@ -107,7 +107,7 @@ export function ProcedureManagement() {
         return {
           id: student.id,
           studentNo: student.student_no,
-          name: profile?.full_name ?? 'Unnamed student',
+          name: `${profile?.first_name ?? ''} ${profile?.last_name ?? ''}`.trim() || 'Unnamed student',
           email: profile?.email ?? 'No email',
           phone: profile?.phone_number ?? 'No phone number',
         }
@@ -268,8 +268,8 @@ export function ProcedureManagement() {
             <h3 className="text-xl font-bold mb-3">Leave a note</h3>
             <textarea className="w-full border border-border rounded-lg p-3 min-h-[140px]" value={noteText} onChange={(e) => setNoteText(e.target.value)} />
             <div className="mt-4 flex gap-2 justify-end">
-              <button className="px-4 py-2 border rounded-lg" onClick={() => setNoteTarget(null)}>Cancel</button>
-              <button className="px-4 py-2 text-white rounded-lg flex items-center gap-2" style={{ backgroundColor: 'var(--brand-pink-dark)' }} onClick={saveNote}>
+              <button className="px-4 py-2 border rounded-lg" onClick={() => setNoteTarget(null)} suppressHydrationWarning>Cancel</button>
+              <button className="px-4 py-2 text-white rounded-lg flex items-center gap-2" style={{ backgroundColor: 'var(--brand-pink-dark)' }} onClick={saveNote} suppressHydrationWarning>
                 <Send className="w-4 h-4" />
                 Save
               </button>
@@ -282,7 +282,7 @@ export function ProcedureManagement() {
 
       {selectedProcedure ? (
         <div>
-          <button className="mb-4 flex items-center gap-2" onClick={() => setSelectedProcedure(null)}>
+          <button className="mb-4 flex items-center gap-2" onClick={() => setSelectedProcedure(null)} suppressHydrationWarning>
             <ArrowLeft className="w-4 h-4" />
             Back
           </button>
@@ -304,8 +304,8 @@ export function ProcedureManagement() {
                         <div className="text-sm mt-2">Status: <b>{row.status}</b></div>
                         {row.notes && <div className="text-sm text-muted-foreground mt-1">Note: {row.notes}</div>}
                         <div className="mt-2 flex gap-2">
-                          <button className="px-3 py-1 border rounded-lg text-sm" onClick={() => { setNoteTarget({ student, procedure: selectedProcedure }); setNoteText(row.notes ?? '') }}>Note</button>
-                          <button className="px-3 py-1 rounded-lg text-sm text-white" style={{ backgroundColor: 'var(--brand-green-dark)' }} onClick={() => setSelectedStudent({ student, procedure: selectedProcedure })}>Evaluate</button>
+                          <button className="px-3 py-1 border rounded-lg text-sm" onClick={() => { setNoteTarget({ student, procedure: selectedProcedure }); setNoteText(row.notes ?? '') }} suppressHydrationWarning>Note</button>
+                          <button className="px-3 py-1 rounded-lg text-sm text-white" style={{ backgroundColor: 'var(--brand-green-dark)' }} onClick={() => setSelectedStudent({ student, procedure: selectedProcedure })} suppressHydrationWarning>Evaluate</button>
                         </div>
                       </div>
                     )
@@ -319,7 +319,7 @@ export function ProcedureManagement() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-3xl font-bold">Procedure Management</h2>
-            <button className="px-4 py-2 text-white rounded-lg flex items-center gap-2" style={{ backgroundColor: 'var(--brand-green-dark)' }} onClick={() => setShowAdd((v) => !v)}>
+            <button className="px-4 py-2 text-white rounded-lg flex items-center gap-2" style={{ backgroundColor: 'var(--brand-green-dark)' }} onClick={() => setShowAdd((v) => !v)} suppressHydrationWarning>
               <Plus className="w-4 h-4" />
               Add Procedure
             </button>
@@ -327,10 +327,10 @@ export function ProcedureManagement() {
 
           {showAdd && (
             <form onSubmit={addProcedure} className="bg-white border rounded-xl p-4 mb-6 space-y-3">
-              <input className="w-full border rounded-lg p-2" placeholder="Procedure name" value={newProcedure.name} onChange={(e) => setNewProcedure((v) => ({ ...v, name: e.target.value }))} required />
-              <input className="w-full border rounded-lg p-2" placeholder="Category" value={newProcedure.category} onChange={(e) => setNewProcedure((v) => ({ ...v, category: e.target.value }))} required />
-              <textarea className="w-full border rounded-lg p-2" placeholder="Description" value={newProcedure.description} onChange={(e) => setNewProcedure((v) => ({ ...v, description: e.target.value }))} />
-              <button disabled={saving} className="px-4 py-2 text-white rounded-lg" style={{ backgroundColor: 'var(--brand-green-dark)' }}>{saving ? 'Saving...' : 'Save'}</button>
+              <input className="w-full border rounded-lg p-2" placeholder="Procedure name" value={newProcedure.name} onChange={(e) => setNewProcedure((v) => ({ ...v, name: e.target.value }))} required suppressHydrationWarning />
+              <input className="w-full border rounded-lg p-2" placeholder="Category" value={newProcedure.category} onChange={(e) => setNewProcedure((v) => ({ ...v, category: e.target.value }))} required suppressHydrationWarning />
+              <textarea className="w-full border rounded-lg p-2" placeholder="Description" value={newProcedure.description} onChange={(e) => setNewProcedure((v) => ({ ...v, description: e.target.value }))} suppressHydrationWarning />
+              <button disabled={saving} className="px-4 py-2 text-white rounded-lg" style={{ backgroundColor: 'var(--brand-green-dark)' }} suppressHydrationWarning>{saving ? 'Saving...' : 'Save'}</button>
             </form>
           )}
 
@@ -349,7 +349,7 @@ export function ProcedureManagement() {
                     {sections.map((section) => {
                       const has = enabled.includes(section.id)
                       return (
-                        <button key={section.id} disabled={saving} onClick={() => toggleSectionAccess(procedure.id, section.id)} className="px-2 py-1 rounded text-sm flex items-center gap-1" style={{ backgroundColor: has ? 'var(--brand-green-dark)' : '#E5E7EB', color: has ? '#fff' : '#333' }}>
+                        <button key={section.id} disabled={saving} onClick={() => toggleSectionAccess(procedure.id, section.id)} className="px-2 py-1 rounded text-sm flex items-center gap-1" style={{ backgroundColor: has ? 'var(--brand-green-dark)' : '#E5E7EB', color: has ? '#fff' : '#333' }} suppressHydrationWarning>
                           {has ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
                           {section.name}
                         </button>

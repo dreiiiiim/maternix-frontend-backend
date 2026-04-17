@@ -25,11 +25,14 @@ export function InstructorDashboard() {
       if (!data.user) return;
       supabase
         .from('profiles')
-        .select('full_name')
+        .select('first_name, last_name')
         .eq('id', data.user.id)
         .single()
         .then(({ data: profile }) => {
-          if (profile?.full_name) setInstructorName(profile.full_name);
+          if (profile) {
+              const name = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || 'Clinical Instructor';
+              setInstructorName(name);
+          }
         });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,6 +69,7 @@ export function InstructorDashboard() {
               onClick={() => setShowProfileMenu(!showProfileMenu)}
               className="flex items-center gap-3 px-4 py-2 rounded-lg transition-all hover:shadow-md"
               style={{ backgroundColor: 'var(--brand-pink-light)' }}
+              suppressHydrationWarning
             >
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center"
@@ -132,6 +136,7 @@ export function InstructorDashboard() {
                   onMouseLeave={(e) => {
                     if (!isActive) e.currentTarget.style.color = 'var(--muted-foreground)';
                   }}
+                  suppressHydrationWarning
                 >
                   <Icon className="w-5 h-5" />
                   <span>{tab.label}</span>

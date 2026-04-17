@@ -7,7 +7,10 @@ export enum SignupRole {
 
 export class SignupDto {
   @IsString()
-  fullName!: string
+  firstName!: string
+
+  @IsString()
+  lastName!: string
 
   @IsEmail()
   email!: string
@@ -22,6 +25,11 @@ export class SignupDto {
   @IsOptional()
   @IsString()
   studentNo?: string
+
+  // Accept section by ID (preferred) or by name (legacy)
+  @IsOptional()
+  @IsString()
+  sectionId?: string
 
   @IsOptional()
   @IsString()

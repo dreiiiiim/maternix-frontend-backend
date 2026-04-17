@@ -48,12 +48,14 @@ type RawSectionRow = {
         student_no: string
         profiles:
           | {
-              full_name: string | null
+              first_name: string | null
+              last_name: string | null
               email: string | null
               phone_number: string | null
             }
           | Array<{
-              full_name: string | null
+              first_name: string | null
+              last_name: string | null
               email: string | null
               phone_number: string | null
             }>
@@ -99,7 +101,7 @@ export function StudentMasterlist() {
     const { data: sectionsData, error: sectionsError } = await supabase
       .from('sections')
       .select(
-        'id, name, semester, schedule, students(id, student_no, profiles(full_name, email, phone_number))'
+        'id, name, semester, schedule, students(id, student_no, profiles(first_name, last_name, email, phone_number))'
       )
       .eq('instructor_id', user.id)
       .order('name', { ascending: true })
@@ -150,7 +152,7 @@ export function StudentMasterlist() {
         return {
           id: student.id,
           studentNo: student.student_no,
-          name: profile?.full_name ?? 'Unnamed student',
+          name: `${profile?.first_name ?? ''} ${profile?.last_name ?? ''}`.trim() || 'Unnamed student',
           email: profile?.email ?? 'No email',
           phone: profile?.phone_number ?? 'No phone number',
           completedProcedures,
@@ -243,6 +245,7 @@ export function StudentMasterlist() {
                   <button
                     onClick={() => toggleSection(section.id)}
                     className="w-full p-6 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                    suppressHydrationWarning
                   >
                     <div className="flex items-center gap-4 flex-1 text-left">
                       <div

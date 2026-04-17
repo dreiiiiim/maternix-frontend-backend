@@ -169,6 +169,7 @@ export function AnnouncementForm() {
                 className="w-full px-4 py-3 rounded-lg border border-border bg-input-background focus:outline-none focus:ring-2"
                 placeholder="e.g., New Clinical Modules Available"
                 required
+                suppressHydrationWarning
               />
             </div>
 
@@ -181,6 +182,7 @@ export function AnnouncementForm() {
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full px-4 py-3 rounded-lg border border-border bg-input-background focus:outline-none focus:ring-2"
+                suppressHydrationWarning
               >
                 {categories.map((cat) => (
                   <option key={cat} value={cat}>
@@ -209,6 +211,7 @@ export function AnnouncementForm() {
               disabled={submitting}
               className="w-full py-3 text-white rounded-lg transition-all hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-70"
               style={{ backgroundColor: 'var(--brand-green-dark)' }}
+              suppressHydrationWarning
             >
               <Send className="w-5 h-5" />
               <span>{submitting ? 'Posting...' : 'Post Announcement'}</span>

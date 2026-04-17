@@ -4,10 +4,13 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Users, BookOpen, UserCheck, Settings, LogOut, Plus, Edit2, Trash2, Check, X, ArrowLeft, ArrowRightLeft } from 'lucide-react';
+import { Users, BookOpen, UserCheck, Settings, LogOut, Plus, Edit2, Trash2, Check, X, ArrowLeft, ArrowRightLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import Image from 'next/image';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
+
+const STUDENT_ID_REGEX = /^NSG-\d{4}-\d{5}$/;
+const EMPLOYEE_ID_REGEX = /^EMP-\d{4}-\d{4}$/;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -23,7 +26,8 @@ type Section = {
 
 type Student = {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   studentId: string;
   sectionId: string;
@@ -31,7 +35,8 @@ type Student = {
 
 type Instructor = {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   employeeId: string;
   department: string;
@@ -40,7 +45,8 @@ type Instructor = {
 
 type PendingUser = {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   role: 'instructor' | 'student';
   requestedDate: string;
@@ -49,7 +55,8 @@ type PendingUser = {
 
 type InstructorOption = {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
 };
 
 // ── Helper ─────────────────────────────────────────────────────────────────
@@ -63,21 +70,26 @@ export function AdminDashboard() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
 
-  const [activeTab, setActiveTab] = useState<'sections' | 'instructors' | 'approvals'>('sections');
+  const [activeTab, setActiveTab] = useState<'sections' | 'instructors' | 'approvals' | 'unassigned'>('sections');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showAddSection, setShowAddSection] = useState(false);
   const [editingSection, setEditingSection] = useState<Section | null>(null);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
+  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null);
   const [editingInstructor, setEditingInstructor] = useState<Instructor | null>(null);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [movingStudent, setMovingStudent] = useState<Student | null>(null);
   const [targetSectionId, setTargetSectionId] = useState<string | null>(null);
+  const [showRemoveAllModal, setShowRemoveAllModal] = useState<Section | null>(null);
 
   const [sections, setSections] = useState<Section[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [instructorOptions, setInstructorOptions] = useState<InstructorOption[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingUser[]>([]);
+  const [selectedUnassignedStudents, setSelectedUnassignedStudents] = useState<string[]>([]);
+  const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
 
   const [approvalsLoading, setApprovalsLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
@@ -85,8 +97,6 @@ export function AdminDashboard() {
   const [newSection, setNewSection] = useState({
     name: '',
     semester: 'Spring 2026',
-    schedule: '',
-    instructor_id: '',
   });
 
   // ── Fetch helpers ──────────────────────────────────────────────────────
@@ -94,10 +104,14 @@ export function AdminDashboard() {
   const fetchInstructorOptions = useCallback(async () => {
     const { data } = await supabase
       .from('profiles')
-      .select('id, full_name')
+      .select('id, first_name, last_name')
       .eq('role', 'instructor')
       .eq('status', 'approved');
-    setInstructorOptions((data ?? []).map((p: any) => ({ id: p.id, name: p.full_name })));
+    setInstructorOptions((data ?? []).map((p: any) => ({ 
+      id: p.id, 
+      firstName: p.first_name, 
+      lastName: p.last_name 
+    })));
   }, [supabase]);
 
   const fetchSections = useCallback(async () => {
@@ -133,13 +147,14 @@ export function AdminDashboard() {
   const fetchStudents = useCallback(async () => {
     const { data, error } = await supabase
       .from('students')
-      .select('id, student_no, section_id, profiles(full_name, email)');
+      .select('id, student_no, section_id, profiles(first_name, last_name, email)');
     if (error) { toast.error(error.message); return; }
     setStudents(((data ?? []) as any[]).map(s => {
       const profile = asArray(s.profiles)[0];
       return {
         id: s.id,
-        name: profile?.full_name ?? 'Unnamed',
+        firstName: profile?.first_name ?? 'Unnamed',
+        lastName: profile?.last_name ?? '',
         email: profile?.email ?? 'No email',
         studentId: s.student_no,
         sectionId: s.section_id,
@@ -148,19 +163,37 @@ export function AdminDashboard() {
   }, [supabase]);
 
   const fetchInstructors = useCallback(async () => {
+    // We cannot join sections(id) directly from instructors because sections references profiles(id).
+    // So we fetch approved instructors and their profiles first.
     const { data, error } = await supabase
       .from('instructors')
-      .select('id, employee_id, department, profiles(full_name, email), sections(id)');
+      .select('id, employee_id, department, profiles!inner(first_name, last_name, email, status)')
+      .eq('profiles.status', 'approved');
+      
     if (error) { toast.error(error.message); return; }
+
+    // Fetch the assigned sections manually from the sections table
+    const { data: sectionData } = await supabase
+      .from('sections')
+      .select('id, instructor_id')
+      .not('instructor_id', 'is', null);
+
+    const sectionMap = new Map<string, string[]>();
+    for (const s of (sectionData ?? []) as any[]) {
+      if (!sectionMap.has(s.instructor_id)) sectionMap.set(s.instructor_id, []);
+      sectionMap.get(s.instructor_id)!.push(s.id);
+    }
+
     setInstructors(((data ?? []) as any[]).map(i => {
       const profile = asArray(i.profiles)[0];
       return {
         id: i.id,
-        name: profile?.full_name ?? 'Unnamed',
+        firstName: profile?.first_name ?? 'Unnamed',
+        lastName: profile?.last_name ?? '',
         email: profile?.email ?? 'No email',
         employeeId: i.employee_id ?? '',
         department: i.department ?? '',
-        assignedSections: asArray(i.sections).map((s: any) => s.id),
+        assignedSections: sectionMap.get(i.id) ?? [],
       };
     }));
   }, [supabase]);
@@ -169,7 +202,7 @@ export function AdminDashboard() {
     setApprovalsLoading(true);
     const { data, error } = await supabase
       .from('profiles')
-      .select(`id, full_name, email, role, created_at, students ( student_no, sections ( name ) )`)
+      .select(`id, first_name, last_name, email, role, created_at, students ( student_no, sections ( name ) )`)
       .eq('status', 'pending')
       .order('created_at', { ascending: true });
 
@@ -180,7 +213,8 @@ export function AdminDashboard() {
           const sectionRow = studentRow ? asArray(studentRow.sections)[0] : null;
           return {
             id: p.id,
-            name: p.full_name,
+            firstName: p.first_name,
+            lastName: p.last_name,
             email: p.email,
             role: p.role as 'student' | 'instructor',
             requestedDate: new Date(p.created_at).toLocaleDateString('en-US', {
@@ -219,11 +253,9 @@ export function AdminDashboard() {
     const { error } = await supabase.from('sections').insert({
       name: newSection.name,
       semester: newSection.semester,
-      schedule: newSection.schedule,
-      instructor_id: newSection.instructor_id || null,
     });
     if (error) { toast.error(error.message); return; }
-    setNewSection({ name: '', semester: 'Spring 2026', schedule: '', instructor_id: '' });
+    setNewSection({ name: '', semester: 'Spring 2026' });
     setShowAddSection(false);
     await fetchSections();
     toast.success('Section added.');
@@ -240,11 +272,7 @@ export function AdminDashboard() {
   const handleUpdateSection = async (section: Section) => {
     const { error } = await supabase
       .from('sections')
-      .update({
-        name: section.name,
-        schedule: section.schedule,
-        instructor_id: section.instructor_id || null,
-      })
+      .update({ name: section.name })
       .eq('id', section.id);
     if (error) { toast.error(error.message); return; }
     setEditingSection(null);
@@ -252,10 +280,58 @@ export function AdminDashboard() {
     toast.success('Section updated.');
   };
 
+  const handleRemoveAllStudents = async (section: Section) => {
+    const sectionStudents = getSectionStudents(section.id);
+    if (sectionStudents.length === 0) { toast.info('No students in this section.'); return; }
+    const { error } = await supabase
+      .from('students')
+      .update({ section_id: null })
+      .in('id', sectionStudents.map(s => s.id));
+    if (error) { toast.error(error.message); return; }
+    setShowRemoveAllModal(null);
+    await Promise.all([fetchSections(), fetchStudents()]);
+    toast.success(`All students removed from ${section.name}.`);
+  };
+
+  const handleUnassignStudent = async (studentId: string) => {
+    if (!confirm('Remove this student from the section?')) return;
+    const { error } = await supabase
+      .from('students')
+      .update({ section_id: null })
+      .eq('id', studentId);
+    if (error) { toast.error(error.message); return; }
+    await Promise.all([fetchSections(), fetchStudents()]);
+    toast.success('Student unassigned from section.');
+  };
+
   // ── Student operations ─────────────────────────────────────────────────
 
   const getSectionStudents = (sectionId: string) =>
     students.filter(s => s.sectionId === sectionId);
+
+  const handleUpdateStudent = async (student: Student) => {
+    if (!STUDENT_ID_REGEX.test(student.studentId)) {
+      toast.error('Invalid Student ID format. Expected: NSG-0000-00000');
+      return;
+    }
+
+    const [{ error: profileErr }, { error: studentErr }] = await Promise.all([
+      supabase.from('profiles').update({ 
+        first_name: student.firstName,
+        last_name: student.lastName,
+        full_name: `${student.firstName} ${student.lastName}`.trim()
+      }).eq('id', student.id),
+      supabase.from('students').update({ student_no: student.studentId }).eq('id', student.id),
+    ]);
+
+    if (profileErr || studentErr) {
+      toast.error(profileErr?.message ?? studentErr?.message ?? 'Update failed');
+      return;
+    }
+    setEditingStudent(null);
+    await Promise.all([fetchStudents(), fetchSections()]);
+    toast.success('Student updated successfully.');
+  };
 
   const handleRemoveStudent = () => {
     toast.info('Students cannot be deleted from the admin panel. Remove the account from the Supabase auth dashboard.');
@@ -275,11 +351,45 @@ export function AdminDashboard() {
     toast.success('Student moved.');
   };
 
+  const handleBulkAssignStudents = async (targetId: string) => {
+    if (selectedUnassignedStudents.length === 0 || !targetId) return;
+    
+    const { error } = await supabase
+      .from('students')
+      .update({ section_id: targetId })
+      .in('id', selectedUnassignedStudents);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success(`Succesfully assigned ${selectedUnassignedStudents.length} students.`);
+    setSelectedUnassignedStudents([]);
+    setShowBulkAssignModal(false);
+    await Promise.all([fetchSections(), fetchStudents()]);
+  };
+
+  const toggleStudentSelection = (id: string) => {
+    setSelectedUnassignedStudents(prev => 
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
   // ── Instructor CRUD ────────────────────────────────────────────────────
 
   const handleUpdateInstructor = async (instructor: Instructor) => {
+    if (!EMPLOYEE_ID_REGEX.test(instructor.employeeId)) {
+      toast.error('Invalid Employee ID format. Expected: EMP-0000-0000');
+      return;
+    }
+
     const [{ error: profileErr }, { error: instrErr }] = await Promise.all([
-      supabase.from('profiles').update({ full_name: instructor.name }).eq('id', instructor.id),
+      supabase.from('profiles').update({ 
+        first_name: instructor.firstName,
+        last_name: instructor.lastName,
+        full_name: `${instructor.firstName} ${instructor.lastName}`.trim()
+      }).eq('id', instructor.id),
       supabase.from('instructors').update({ employee_id: instructor.employeeId, department: instructor.department }).eq('id', instructor.id),
     ]);
     if (profileErr || instrErr) {
@@ -295,15 +405,23 @@ export function AdminDashboard() {
 
   const handleApprove = async (userId: string) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({ userId, action: 'approve' }),
       });
       if (!res.ok) throw new Error((await res.json()).message ?? 'Failed');
       toast.success('User approved — approval email sent.');
-      await fetchPendingApprovals();
+      await Promise.all([
+        fetchPendingApprovals(),
+        fetchStudents(),
+        fetchInstructors(),
+        fetchSections()
+      ]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not approve user.');
     }
@@ -311,10 +429,13 @@ export function AdminDashboard() {
 
   const handleReject = async (userId: string) => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
         body: JSON.stringify({ userId, action: 'reject' }),
       });
       if (!res.ok) throw new Error((await res.json()).message ?? 'Failed');
@@ -330,9 +451,35 @@ export function AdminDashboard() {
     router.push('/');
   };
 
+  const handleRemoveUser = async (userId: string) => {
+    if (!confirm('Are you sure you want to permanently delete this user account? This action cannot be undone.')) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/remove`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({ userId }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message ?? 'Failed');
+      toast.success('User account permanently deleted.');
+      await Promise.all([
+        fetchPendingApprovals(),
+        fetchStudents(),
+        fetchInstructors(),
+        fetchSections()
+      ]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not remove user.');
+    }
+  };
+
   // ── Derived stats ──────────────────────────────────────────────────────
 
   const totalStudents = students.length;
+  const unassignedStudents = students.filter(s => !s.sectionId);
 
   // ── Render ─────────────────────────────────────────────────────────────
 
@@ -392,25 +539,29 @@ export function AdminDashboard() {
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
           {[
-            { label: 'Total Sections', value: sections.length, icon: BookOpen, color: 'var(--brand-green-dark)' },
-            { label: 'Total Instructors', value: instructors.length, icon: UserCheck, color: 'var(--brand-green-medium)' },
-            { label: 'Total Students', value: totalStudents, icon: Users, color: 'var(--brand-pink-dark)' },
-            { label: 'Pending Approvals', value: pendingApprovals.length, icon: UserCheck, color: 'var(--brand-pink-medium)' },
+            { label: 'Total Sections', value: sections.length, icon: BookOpen, color: 'var(--brand-green-dark)', tab: 'sections' as const },
+            { label: 'Total Instructors', value: instructors.length, icon: UserCheck, color: 'var(--brand-green-medium)', tab: 'instructors' as const },
+            { label: 'Total Students', value: totalStudents, icon: Users, color: 'var(--brand-pink-dark)', tab: 'sections' as const },
+            { label: 'Unassigned', value: unassignedStudents.length, icon: ArrowRightLeft, color: 'var(--brand-pink-medium)', tab: 'unassigned' as const },
           ].map((stat, index) => (
             <motion.div
               key={index}
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ duration: 0.5, delay: index * 0.1 }}
-              className="bg-white border border-border rounded-2xl p-6"
+              onClick={() => setActiveTab(stat.tab)}
+              className="bg-white border border-border p-8 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer group"
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: `${stat.color}20` }}>
-                  <stat.icon className="w-6 h-6" style={{ color: stat.color }} />
+                <div 
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center transition-all group-hover:scale-110"
+                  style={{ backgroundColor: `${stat.color}15` }}
+                >
+                  <stat.icon className="w-7 h-7" style={{ color: stat.color }} />
                 </div>
                 <div>
-                  <div className="text-3xl font-bold text-foreground">{stat.value}</div>
-                  <div className="text-sm text-muted-foreground">{stat.label}</div>
+                  <div className="text-3xl font-bold text-foreground mb-1">{stat.value}</div>
+                  <div className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{stat.label}</div>
                 </div>
               </div>
             </motion.div>
@@ -419,7 +570,7 @@ export function AdminDashboard() {
 
         {/* Tabs */}
         <div className="flex gap-4 mb-8">
-          {(['sections', 'instructors', 'approvals'] as const).map((tab) => (
+          {(['sections', 'instructors', 'unassigned', 'approvals'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -430,7 +581,10 @@ export function AdminDashboard() {
                 border: activeTab === tab ? 'none' : '1px solid var(--border)',
               }}
             >
-              {tab === 'sections' ? 'Section Management' : tab === 'instructors' ? 'Instructor Management' : 'User Approvals'}
+              {tab === 'sections' ? 'Sections' : 
+               tab === 'instructors' ? 'Instructors' : 
+               tab === 'unassigned' ? 'Unassigned Students' :
+               'User Approvals'}
               {tab === 'approvals' && pendingApprovals.length > 0 && (
                 <span className="px-2 py-1 rounded-full text-xs bg-red-500 text-white">
                   {pendingApprovals.length}
@@ -474,6 +628,7 @@ export function AdminDashboard() {
                         className="w-full px-4 py-3 rounded-lg border border-border bg-input-background"
                         placeholder="e.g., BSN 2D"
                         required
+                        suppressHydrationWarning
                       />
                     </div>
                     <div>
@@ -484,38 +639,15 @@ export function AdminDashboard() {
                         onChange={(e) => setNewSection({ ...newSection, semester: e.target.value })}
                         className="w-full px-4 py-3 rounded-lg border border-border bg-input-background"
                         required
+                        suppressHydrationWarning
                       />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2 text-foreground">Schedule</label>
-                      <input
-                        type="text"
-                        value={newSection.schedule}
-                        onChange={(e) => setNewSection({ ...newSection, schedule: e.target.value })}
-                        className="w-full px-4 py-3 rounded-lg border border-border bg-input-background"
-                        placeholder="e.g., Mon/Wed 8:00 AM – 12:00 PM"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2 text-foreground">Instructor (Optional)</label>
-                      <select
-                        value={newSection.instructor_id}
-                        onChange={(e) => setNewSection({ ...newSection, instructor_id: e.target.value })}
-                        className="w-full px-4 py-3 rounded-lg border border-border bg-input-background"
-                      >
-                        <option value="">— No instructor assigned —</option>
-                        {instructorOptions.map(opt => (
-                          <option key={opt.id} value={opt.id}>{opt.name}</option>
-                        ))}
-                      </select>
                     </div>
                   </div>
                   <div className="flex gap-3">
-                    <button type="submit" className="px-6 py-2 text-white rounded-lg" style={{ backgroundColor: 'var(--brand-green-dark)' }}>
+                    <button type="submit" className="px-6 py-2 text-white rounded-lg" style={{ backgroundColor: 'var(--brand-green-dark)' }} suppressHydrationWarning>
                       Add Section
                     </button>
-                    <button type="button" onClick={() => setShowAddSection(false)} className="px-6 py-2 border border-border rounded-lg">
+                    <button type="button" onClick={() => setShowAddSection(false)} className="px-6 py-2 border border-border rounded-lg" suppressHydrationWarning>
                       Cancel
                     </button>
                   </div>
@@ -530,11 +662,13 @@ export function AdminDashboard() {
               <div className="bg-white border border-border rounded-xl p-12 text-center text-muted-foreground">No sections yet.</div>
             ) : (
               <div className="space-y-4">
-                {sections.map((section) => (
-                  <div key={section.id} className="bg-white border border-border rounded-xl p-6">
-                    {editingSection?.id === section.id ? (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                {sections.map((section) => {
+                  const isExpanded = expandedSectionId === section.id;
+                  const sectionStudents = getSectionStudents(section.id);
+                  return (
+                    <div key={section.id} className="bg-white border border-border rounded-xl overflow-hidden">
+                      {editingSection?.id === section.id ? (
+                        <div className="p-6 space-y-4">
                           <div>
                             <label className="block text-sm font-medium mb-2">Section Name</label>
                             <input
@@ -542,221 +676,457 @@ export function AdminDashboard() {
                               value={editingSection.name}
                               onChange={(e) => setEditingSection({ ...editingSection, name: e.target.value })}
                               className="w-full px-4 py-2 rounded-lg border border-border"
+                              suppressHydrationWarning
                             />
                           </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Schedule</label>
-                            <input
-                              type="text"
-                              value={editingSection.schedule}
-                              onChange={(e) => setEditingSection({ ...editingSection, schedule: e.target.value })}
-                              className="w-full px-4 py-2 rounded-lg border border-border"
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <label className="block text-sm font-medium mb-2">Instructor</label>
-                            <select
-                              value={editingSection.instructor_id ?? ''}
-                              onChange={(e) => setEditingSection({ ...editingSection, instructor_id: e.target.value || null, instructor: instructorOptions.find(o => o.id === e.target.value)?.name ?? null })}
-                              className="w-full px-4 py-2 rounded-lg border border-border"
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => handleUpdateSection(editingSection)}
+                              className="px-4 py-2 text-white rounded-lg"
+                              style={{ backgroundColor: 'var(--brand-green-dark)' }}
+                              suppressHydrationWarning
                             >
-                              <option value="">— No instructor assigned —</option>
-                              {instructorOptions.map(opt => (
-                                <option key={opt.id} value={opt.id}>{opt.name}</option>
-                              ))}
-                            </select>
+                              Save
+                            </button>
+                            <button onClick={() => setEditingSection(null)} className="px-4 py-2 border border-border rounded-lg" suppressHydrationWarning>
+                              Cancel
+                            </button>
                           </div>
                         </div>
-                        <div className="flex gap-3">
-                          <button
-                            onClick={() => handleUpdateSection(editingSection)}
-                            className="px-4 py-2 text-white rounded-lg"
-                            style={{ backgroundColor: 'var(--brand-green-dark)' }}
+                      ) : (
+                        <>
+                          {/* Section header row — click to expand/collapse */}
+                          <div
+                            className="w-full flex items-center justify-between p-6 text-left hover:bg-gray-50 transition-colors cursor-pointer"
+                            onClick={() => setExpandedSectionId(isExpanded ? null : section.id)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setExpandedSectionId(isExpanded ? null : section.id);
+                              }
+                            }}
+                            suppressHydrationWarning
                           >
-                            Save
-                          </button>
-                          <button onClick={() => setEditingSection(null)} className="px-4 py-2 border border-border rounded-lg">
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 cursor-pointer" onClick={() => setSelectedSection(section)}>
-                          <h3 className="text-xl font-bold text-foreground mb-2 hover:underline">{section.name}</h3>
-                          <div className="text-sm text-muted-foreground space-y-1">
-                            <p>Schedule: {section.schedule || '—'}</p>
-                            <p>Instructor: {section.instructor || 'Not assigned'}</p>
-                            <p>Students: {section.studentCount}</p>
+                            <div className="flex-1">
+                              <h3 className="text-xl font-bold text-foreground mb-1">{section.name}</h3>
+                              <div className="text-sm text-muted-foreground space-y-0.5">
+                                <p>Students: {section.studentCount}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 ml-4">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setEditingSection(section); }}
+                                className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
+                                suppressHydrationWarning
+                              >
+                                <Edit2 className="w-5 h-5" style={{ color: 'var(--brand-green-dark)' }} />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }}
+                                className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
+                                suppressHydrationWarning
+                              >
+                                <Trash2 className="w-5 h-5" style={{ color: 'var(--brand-pink-dark)' }} />
+                              </button>
+                              {isExpanded
+                                ? <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                                : <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                              }
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setEditingSection(section); }}
-                            className="p-2 rounded-lg hover:bg-gray-100"
-                          >
-                            <Edit2 className="w-5 h-5" style={{ color: 'var(--brand-green-dark)' }} />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteSection(section.id); }}
-                            className="p-2 rounded-lg hover:bg-gray-100"
-                          >
-                            <Trash2 className="w-5 h-5" style={{ color: 'var(--brand-pink-dark)' }} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+
+                          {/* Expanded students panel */}
+                          {isExpanded && (
+                            <div className="border-t border-border p-6 bg-gray-50">
+                              <div className="flex items-center justify-between mb-4">
+                                <h4 className="font-semibold text-foreground">Students in {section.name}</h4>
+                                {sectionStudents.length > 0 && (
+                                  <button
+                                    onClick={() => setShowRemoveAllModal(section)}
+                                    className="px-4 py-2 text-white rounded-lg flex items-center gap-2 text-sm hover:scale-105 transition-all"
+                                    style={{ backgroundColor: 'var(--brand-pink-dark)' }}
+                                    suppressHydrationWarning
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    Remove All Students
+                                  </button>
+                                )}
+                              </div>
+                              {sectionStudents.length === 0 ? (
+                                <p className="text-sm text-muted-foreground text-center py-4">No students in this section.</p>
+                              ) : (
+                                <div className="space-y-3">
+                                  {sectionStudents.map((student) => (
+                                    <div key={student.id} className="bg-white border border-border rounded-lg p-4 flex items-center justify-between">
+                                      <div className="flex-1">
+                                        <p className="font-bold text-foreground">{student.firstName} {student.lastName}</p>
+                                        <p className="text-sm text-muted-foreground">ID: {student.studentId} • {student.email}</p>
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => setEditingStudent(student)}
+                                          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                                          title="Edit Student Information"
+                                          suppressHydrationWarning
+                                        >
+                                          <Edit2 className="w-4 h-4" style={{ color: 'var(--brand-green-dark)' }} />
+                                        </button>
+                                        <button
+                                          onClick={() => { setMovingStudent(student); setTargetSectionId(null); setShowMoveModal(true); }}
+                                          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                                          title="Move to Another Section"
+                                          suppressHydrationWarning
+                                        >
+                                          <ArrowRightLeft className="w-4 h-4" style={{ color: 'var(--brand-green-dark)' }} />
+                                        </button>
+                                        <button
+                                          onClick={() => handleUnassignStudent(student.id)}
+                                          className="p-2 rounded-lg hover:bg-red-50 transition-colors"
+                                          title="Remove from Section"
+                                          suppressHydrationWarning
+                                        >
+                                          <X className="w-4 h-4" style={{ color: 'var(--brand-pink-dark)' }} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </motion.div>
         )}
 
-        {/* ── Student Management View (within section) ─────────────────── */}
-        {activeTab === 'sections' && selectedSection && (
+        {/* ── Unassigned Students Tab ───────────────────────────────────── */}
+        {activeTab === 'unassigned' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <button
-              onClick={() => setSelectedSection(null)}
-              className="inline-flex items-center gap-2 mb-6 text-sm transition-colors"
-              style={{ color: 'var(--brand-green-dark)' }}
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Sections
-            </button>
-
             <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">{selectedSection.name} — Students</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {selectedSection.schedule} • Instructor: {selectedSection.instructor || 'Not assigned'}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {getSectionStudents(selectedSection.id).length === 0 ? (
-                <div className="bg-white border border-border rounded-xl p-12 text-center">
-                  <Users className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                  <p className="text-lg text-muted-foreground">No students in this section</p>
-                  <p className="text-sm text-muted-foreground mt-2">Students join via the signup flow and are assigned here upon registration.</p>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-amber-100 text-amber-600">
+                  <Users className="w-5 h-5" />
                 </div>
-              ) : (
-                getSectionStudents(selectedSection.id).map((student) => (
-                  <div key={student.id} className="bg-white border border-border rounded-xl p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-xl font-bold text-foreground mb-2">{student.name}</h3>
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <p>Email: {student.email}</p>
-                          <p>Student ID: {student.studentId}</p>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => {
-                            setMovingStudent(student);
-                            setTargetSectionId(null);
-                            setShowMoveModal(true);
-                          }}
-                          className="px-4 py-2 text-white rounded-lg flex items-center gap-2 hover:scale-105 transition-all"
-                          style={{ backgroundColor: 'var(--brand-green-dark)' }}
-                        >
-                          <ArrowRightLeft className="w-5 h-5" />
-                          Move
-                        </button>
-                        <button
-                          onClick={handleRemoveStudent}
-                          className="px-4 py-2 text-white rounded-lg flex items-center gap-2 hover:scale-105 transition-all"
-                          style={{ backgroundColor: 'var(--brand-pink-dark)' }}
-                        >
-                          <Trash2 className="w-5 h-5" />
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground">Unassigned Students</h2>
+                  <p className="text-sm text-muted-foreground">Manage students without a section assignment</p>
+                </div>
+              </div>
+              {selectedUnassignedStudents.length > 0 && (
+                <button
+                  onClick={() => setShowBulkAssignModal(true)}
+                  className="px-6 py-3 text-white rounded-lg transition-all hover:scale-105 flex items-center gap-2"
+                  style={{ backgroundColor: 'var(--brand-green-dark)' }}
+                  suppressHydrationWarning
+                >
+                  <ArrowRightLeft className="w-5 h-5" />
+                  Assign Selected ({selectedUnassignedStudents.length})
+                </button>
               )}
             </div>
 
-            {/* Move Student Modal */}
-            {showMoveModal && movingStudent && (
-              <div
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6"
-                onClick={() => { setShowMoveModal(false); setMovingStudent(null); setTargetSectionId(null); }}
-              >
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.2 }}
-                  className="bg-white rounded-2xl max-w-lg w-full p-8"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <h3 className="text-2xl font-bold text-foreground mb-2">Move Student to Another Section</h3>
-                  <p className="text-muted-foreground mb-6">Select a section to move {movingStudent.name} to</p>
-
-                  <div className="space-y-3 mb-6">
-                    <div className="p-4 bg-gray-50 rounded-lg border border-border">
-                      <p className="text-sm text-muted-foreground mb-1">Current Section:</p>
-                      <p className="font-bold text-foreground">{sections.find(s => s.id === movingStudent.sectionId)?.name ?? '—'}</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-3 text-foreground">Move to Section:</label>
-                      <div className="space-y-2">
-                        {sections
-                          .filter(section => section.id !== movingStudent.sectionId)
-                          .map((section) => (
-                            <button
-                              key={section.id}
-                              onClick={() => setTargetSectionId(section.id)}
-                              className="w-full p-4 rounded-lg border-2 text-left transition-all"
-                              style={{
-                                borderColor: targetSectionId === section.id ? 'var(--brand-green-dark)' : 'var(--border)',
-                                backgroundColor: targetSectionId === section.id ? 'rgba(69,117,88,0.06)' : 'white',
-                              }}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <p className="font-bold text-foreground">{section.name}</p>
-                                  <p className="text-sm text-muted-foreground">{section.schedule}</p>
-                                  <p className="text-sm text-muted-foreground">Instructor: {section.instructor || 'Not assigned'}</p>
-                                </div>
-                                {targetSectionId === section.id && (
-                                  <Check className="w-6 h-6" style={{ color: 'var(--brand-green-dark)' }} />
-                                )}
-                              </div>
-                            </button>
-                          ))}
+            {unassignedStudents.length === 0 ? (
+              <div className="bg-white border border-border rounded-2xl p-12 text-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-50 flex items-center justify-center">
+                  <Check className="w-8 h-8 text-green-500" />
+                </div>
+                <p className="text-lg font-medium text-foreground">All students are assigned</p>
+                <p className="text-sm text-muted-foreground mt-1">There are no unassigned students at the moment.</p>
+              </div>
+            ) : (
+              <div className="bg-white border border-border rounded-xl overflow-hidden shadow-sm">
+                <div className="p-4 bg-gray-50 border-b border-border flex items-center gap-4">
+                  <input 
+                    type="checkbox" 
+                    className="w-5 h-5 rounded border-gray-300"
+                    checked={selectedUnassignedStudents.length === unassignedStudents.length && unassignedStudents.length > 0}
+                    onChange={() => {
+                      if (selectedUnassignedStudents.length === unassignedStudents.length) {
+                        setSelectedUnassignedStudents([]);
+                      } else {
+                        setSelectedUnassignedStudents(unassignedStudents.map(s => s.id));
+                      }
+                    }}
+                  />
+                  <span className="text-sm font-medium text-foreground">Select All Unassigned</span>
+                </div>
+                <div className="divide-y divide-border">
+                  {unassignedStudents.map((student) => (
+                    <div key={student.id} className="p-4 flex items-center gap-4 hover:bg-gray-50 transition-colors">
+                      <input 
+                        type="checkbox" 
+                        className="w-5 h-5 rounded border-gray-300"
+                        checked={selectedUnassignedStudents.includes(student.id)}
+                        onChange={() => toggleStudentSelection(student.id)}
+                      />
+                      <div className="flex-1">
+                        <p className="font-bold text-foreground">{student.firstName} {student.lastName}</p>
+                        <p className="text-sm text-muted-foreground">ID: {student.studentId} • {student.email}</p>
+                      </div>
+                      <div className="flex gap-2">
+                         <button
+                          onClick={() => setEditingStudent(student)}
+                          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                          suppressHydrationWarning
+                        >
+                          <Edit2 className="w-4 h-4 text-muted-foreground" />
+                        </button>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="flex gap-3 justify-end">
-                    <button
-                      onClick={() => { setShowMoveModal(false); setMovingStudent(null); setTargetSectionId(null); }}
-                      className="px-6 py-3 border border-border rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleMoveStudent}
-                      disabled={!targetSectionId}
-                      className="px-6 py-3 text-white rounded-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                      style={{ backgroundColor: 'var(--brand-green-dark)' }}
-                    >
-                      Move Student
-                    </button>
-                  </div>
-                </motion.div>
+                  ))}
+                </div>
               </div>
             )}
           </motion.div>
+        )}
+
+        {/* ── Remove All Students Confirmation Modal ────────────────────── */}
+        {showRemoveAllModal && (
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+            onClick={() => setShowRemoveAllModal(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-2xl max-w-md w-full p-8"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-2xl font-bold text-foreground mb-2">Remove All Students</h3>
+              <p className="text-muted-foreground mb-6">
+                This will unassign all <strong>{getSectionStudents(showRemoveAllModal.id).length}</strong> student(s) from <strong>{showRemoveAllModal.name}</strong>. Their accounts will remain active but they will no longer be in this section.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowRemoveAllModal(null)}
+                  className="px-6 py-3 border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                  suppressHydrationWarning
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleRemoveAllStudents(showRemoveAllModal)}
+                  className="px-6 py-3 text-white rounded-lg transition-all hover:scale-105"
+                  style={{ backgroundColor: 'var(--brand-pink-dark)' }}
+                  suppressHydrationWarning
+                >
+                  Yes, Remove All
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ── Move Student Modal (global, used from expanded section panels) ── */}
+        {showMoveModal && movingStudent && (
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+            onClick={() => { setShowMoveModal(false); setMovingStudent(null); setTargetSectionId(null); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-2xl max-w-lg w-full p-8"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-2xl font-bold text-foreground mb-2">Move Student to Another Section</h3>
+              <p className="text-muted-foreground mb-6">Select a section to move <strong>{movingStudent.firstName} {movingStudent.lastName}</strong> to</p>
+
+              <div className="space-y-3 mb-6">
+                <div className="p-4 bg-gray-50 rounded-lg border border-border">
+                  <p className="text-sm text-muted-foreground mb-1">Current Section:</p>
+                  <p className="font-bold text-foreground">{sections.find(s => s.id === movingStudent.sectionId)?.name ?? '—'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-3 text-foreground">Move to Section:</label>
+                  <div className="space-y-2">
+                    {sections
+                      .filter(s => s.id !== movingStudent.sectionId)
+                      .map((section) => (
+                        <button
+                          key={section.id}
+                          onClick={() => setTargetSectionId(section.id)}
+                          className="w-full p-4 rounded-lg border-2 text-left transition-all"
+                          style={{
+                            borderColor: targetSectionId === section.id ? 'var(--brand-green-dark)' : 'var(--border)',
+                            backgroundColor: targetSectionId === section.id ? 'rgba(69,117,88,0.06)' : 'white',
+                          }}
+                          suppressHydrationWarning
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-bold text-foreground">{section.name}</p>
+                              <p className="text-sm text-muted-foreground">Instructor: {section.instructor || 'Not assigned'}</p>
+                            </div>
+                            {targetSectionId === section.id && (
+                              <Check className="w-6 h-6" style={{ color: 'var(--brand-green-dark)' }} />
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => { setShowMoveModal(false); setMovingStudent(null); setTargetSectionId(null); }}
+                  className="px-6 py-3 border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                  suppressHydrationWarning
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleMoveStudent}
+                  disabled={!targetSectionId}
+                  className="px-6 py-3 text-white rounded-lg transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  style={{ backgroundColor: 'var(--brand-green-dark)' }}
+                  suppressHydrationWarning
+                >
+                  Move Student
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ── Edit Student Modal ─────────────────────────────────────────── */}
+        {editingStudent && (
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+            onClick={() => setEditingStudent(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-2xl max-w-md w-full p-8"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-2xl font-bold text-foreground mb-6">Edit Student Information</h3>
+              
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-foreground">First Name</label>
+                    <input
+                      type="text"
+                      value={editingStudent.firstName}
+                      onChange={(e) => setEditingStudent({ ...editingStudent, firstName: e.target.value })}
+                      className="w-full px-4 py-2 rounded-lg border border-border bg-input-background"
+                      placeholder="e.g. Maria"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-foreground">Last Name</label>
+                    <input
+                      type="text"
+                      value={editingStudent.lastName}
+                      onChange={(e) => setEditingStudent({ ...editingStudent, lastName: e.target.value })}
+                      className="w-full px-4 py-2 rounded-lg border border-border bg-input-background"
+                      placeholder="e.g. Santos"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-foreground">Student ID</label>
+                  <input
+                    type="text"
+                    value={editingStudent.studentId}
+                    onChange={(e) => setEditingStudent({ ...editingStudent, studentId: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-border bg-input-background"
+                    placeholder="NSG-0000-00000"
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Format: NSG-YYYY-NNNNN (e.g., NSG-2024-12345)</p>
+                </div>
+
+                <div className="pt-4 flex gap-3">
+                  <button
+                    onClick={() => handleUpdateStudent(editingStudent)}
+                    className="flex-1 px-4 py-3 text-white rounded-lg transition-all hover:scale-105"
+                    style={{ backgroundColor: 'var(--brand-green-dark)' }}
+                  >
+                    Save Changes
+                  </button>
+                  <button
+                    onClick={() => setEditingStudent(null)}
+                    className="flex-1 px-4 py-3 border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ── Bulk Assign Modal ─────────────────────────────────────────── */}
+        {showBulkAssignModal && (
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+            onClick={() => setShowBulkAssignModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-2xl max-w-lg w-full p-8"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-2xl font-bold text-foreground mb-2">Assign {selectedUnassignedStudents.length} Students</h3>
+              <p className="text-muted-foreground mb-6">Select a target section to assign the selected students to.</p>
+
+              <div className="space-y-2 max-h-[40vh] overflow-y-auto mb-6">
+                {sections.map((section) => (
+                  <button
+                    key={section.id}
+                    onClick={() => handleBulkAssignStudents(section.id)}
+                    className="w-full p-4 rounded-lg border-2 text-left transition-all hover:border-brand-green-dark"
+                    style={{
+                      borderColor: 'var(--border)',
+                      backgroundColor: 'white',
+                    }}
+                    suppressHydrationWarning
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-foreground">{section.name}</p>
+                        <p className="text-sm text-muted-foreground">Semester: {section.semester}</p>
+                      </div>
+                      <ArrowRightLeft className="w-5 h-5 text-muted-foreground opacity-20" />
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowBulkAssignModal(false)}
+                  className="px-6 py-3 border border-border rounded-lg hover:bg-gray-100 transition-colors"
+                  suppressHydrationWarning
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
 
         {/* ── Instructor Management Tab ─────────────────────────────────── */}
@@ -784,24 +1154,37 @@ export function AdminDashboard() {
                   <div key={instructor.id} className="bg-white border border-border rounded-xl p-6">
                     {editingInstructor?.id === instructor.id ? (
                       <div className="space-y-4">
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-sm font-medium mb-2">Instructor Name</label>
+                            <label className="block text-sm font-medium mb-2">First Name</label>
                             <input
                               type="text"
-                              value={editingInstructor.name}
-                              onChange={(e) => setEditingInstructor({ ...editingInstructor, name: e.target.value })}
+                              value={editingInstructor.firstName}
+                              onChange={(e) => setEditingInstructor({ ...editingInstructor, firstName: e.target.value })}
                               className="w-full px-4 py-2 rounded-lg border border-border"
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium mb-2">Employee ID</label>
+                            <label className="block text-sm font-medium mb-2">Last Name</label>
                             <input
                               type="text"
-                              value={editingInstructor.employeeId}
-                              onChange={(e) => setEditingInstructor({ ...editingInstructor, employeeId: e.target.value })}
+                              value={editingInstructor.lastName}
+                              onChange={(e) => setEditingInstructor({ ...editingInstructor, lastName: e.target.value })}
                               className="w-full px-4 py-2 rounded-lg border border-border"
                             />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Employee ID</label>
+                             <input
+                               type="text"
+                               name="employeeId"
+                               value={editingInstructor.employeeId}
+                               onChange={(e) => setEditingInstructor({ ...editingInstructor, employeeId: e.target.value })}
+                               className="w-full px-4 py-2 rounded-lg border border-border"
+                               placeholder="EMP-0000-0000"
+                             />
                           </div>
                           <div>
                             <label className="block text-sm font-medium mb-2">Department</label>
@@ -829,7 +1212,7 @@ export function AdminDashboard() {
                     ) : (
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
-                          <h3 className="text-xl font-bold text-foreground mb-2">{instructor.name}</h3>
+                          <h3 className="text-xl font-bold text-foreground mb-2">{instructor.firstName} {instructor.lastName}</h3>
                           <div className="text-sm text-muted-foreground space-y-1">
                             <p>Email: {instructor.email}</p>
                             <p>Employee ID: {instructor.employeeId || '—'}</p>
@@ -846,8 +1229,14 @@ export function AdminDashboard() {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => setEditingInstructor(instructor)} className="p-2 rounded-lg hover:bg-gray-100">
+                          <button onClick={() => setEditingInstructor(instructor)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
                             <Edit2 className="w-5 h-5" style={{ color: 'var(--brand-green-dark)' }} />
+                          </button>
+                          <button 
+                            onClick={() => handleRemoveUser(instructor.id)} 
+                            className="p-2 rounded-lg hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 className="w-5 h-5" style={{ color: 'var(--brand-pink-dark)' }} />
                           </button>
                         </div>
                       </div>
@@ -884,7 +1273,7 @@ export function AdminDashboard() {
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-xl font-bold text-foreground">{user.name}</h3>
+                          <h3 className="text-xl font-bold text-foreground">{user.firstName} {user.lastName}</h3>
                           <span
                             className="px-3 py-1 rounded-full text-xs text-white"
                             style={{
@@ -901,22 +1290,26 @@ export function AdminDashboard() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
                           onClick={() => handleApprove(user.id)}
-                          className="px-4 py-2 text-white rounded-lg flex items-center gap-2"
+                          className="px-4 py-2 text-white rounded-lg flex items-center gap-2 shadow-sm"
                           style={{ backgroundColor: 'var(--brand-green-dark)' }}
                         >
                           <Check className="w-5 h-5" />
                           Approve
-                        </button>
-                        <button
+                        </motion.button>
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
                           onClick={() => handleReject(user.id)}
-                          className="px-4 py-2 text-white rounded-lg flex items-center gap-2"
+                          className="px-4 py-2 text-white rounded-lg flex items-center gap-2 shadow-sm"
                           style={{ backgroundColor: 'var(--brand-pink-dark)' }}
                         >
                           <X className="w-5 h-5" />
                           Reject
-                        </button>
+                        </motion.button>
                       </div>
                     </div>
                   </div>

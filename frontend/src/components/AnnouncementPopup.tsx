@@ -22,10 +22,12 @@ type AnnouncementRow = {
   created_at: string
   profiles:
     | {
-        full_name: string | null
+        first_name: string | null
+        last_name: string | null
       }
     | Array<{
-        full_name: string | null
+        first_name: string | null
+        last_name: string | null
       }>
     | null
 }
@@ -63,17 +65,18 @@ export function AnnouncementPopup({ onViewAll }: AnnouncementPopupProps) {
 
         const { data } = await supabase
           .from('announcements')
-          .select('id, title, content, category, created_at, profiles!announcements_created_by_fkey(full_name)')
+          .select('id, title, content, category, created_at, profiles!announcements_created_by_fkey(first_name, last_name)')
           .or(`target_role.eq.all,target_role.eq.${profile.role}`)
           .order('created_at', { ascending: false })
           .limit(2)
 
         const mapped = ((data ?? []) as AnnouncementRow[]).map((row) => {
           const creator = asArray(row.profiles)[0]
+          const authorName = creator ? `${creator.first_name || ''} ${creator.last_name || ''}`.trim() : 'Maternix'
           return {
             id: row.id,
             title: row.title,
-            instructor: creator?.full_name ?? 'Maternix',
+            instructor: authorName || 'Maternix',
             date: new Date(row.created_at).toLocaleDateString('en-US', {
               year: 'numeric',
               month: 'long',
