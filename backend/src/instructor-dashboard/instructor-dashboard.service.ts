@@ -46,6 +46,11 @@ type ProcedureRecord = {
   name: string;
   category: string;
   description: string;
+  resources: Array<{
+    type: 'file' | 'link';
+    name: string;
+    url: string;
+  }>;
 };
 
 type ProcedureDashboardResponse = {
@@ -62,11 +67,6 @@ type ProcedureDashboardResponse = {
     }>;
   }>;
   studentProcedures: StudentProcedureRow[];
-  sectionAccess: Array<{
-    procedureId: string;
-    sectionId: string;
-    createdAt: string;
-  }>;
 };
 
 @Injectable()
@@ -187,7 +187,6 @@ export class InstructorDashboardService {
     const [
       { data: sectionsData, error: sectionsError },
       { data: proceduresData, error: proceduresError },
-      { data: sectionAccessData, error: sectionAccessError },
     ] = await Promise.all([
       db
         .from('sections')
@@ -198,15 +197,13 @@ export class InstructorDashboardService {
         .order('name', { ascending: true }),
       db
         .from('procedures')
-        .select('id, name, category, description')
+        .select(
+          'id, name, category, description, procedure_resources(type, name, url)'
+        )
         .order('created_at', { ascending: false }),
-      db
-        .from('procedure_section_access')
-        .select('procedure_id, section_id, created_at, sections!inner(instructor_id)')
-        .eq('sections.instructor_id', caller.user.id),
     ]);
 
-    const firstError = sectionsError ?? proceduresError ?? sectionAccessError;
+    const firstError = sectionsError ?? proceduresError;
     if (firstError) {
       throw new BadRequestException(firstError.message);
     }
@@ -233,14 +230,6 @@ export class InstructorDashboardService {
       section.students.map((student) => student.id)
     );
 
-    const sectionAccess = ((sectionAccessData ?? []) as any[]).map((row) => ({
-      procedureId: row.procedure_id as string,
-      sectionId: row.section_id as string,
-      createdAt: row.created_at as string,
-    }));
-
-    await this.syncSectionAccessToStudents(sectionAccess, sections);
-
     let studentProcedures: StudentProcedureRow[] = [];
 
     if (allStudentIds.length > 0) {
@@ -262,15 +251,28 @@ export class InstructorDashboardService {
         name: procedure.name,
         category: procedure.category,
         description: procedure.description ?? '',
+        resources: this.asArray(procedure.procedure_resources).map((resource: any) => ({
+          type: resource.type as 'file' | 'link',
+          name: resource.name as string,
+          url: resource.url as string,
+        })),
       })),
       sections,
       studentProcedures,
-      sectionAccess,
     };
   }
 
   async addProcedure(
-    dto: { name: string; category?: string; description?: string },
+    dto: {
+      name: string;
+      category?: string;
+      description?: string;
+      resources?: Array<{
+        type?: 'file' | 'link';
+        name?: string;
+        url?: string;
+      }>;
+    },
     accessToken: string
   ) {
     const caller = await this.requireInstructor(accessToken);
@@ -291,6 +293,30 @@ export class InstructorDashboardService {
       throw new BadRequestException(error.message);
     }
 
+    const resources = (dto.resources ?? []).filter(
+      (resource): resource is { type: 'file' | 'link'; name: string; url: string } =>
+        (resource.type === 'file' || resource.type === 'link') &&
+        Boolean(resource.name?.trim()) &&
+        Boolean(resource.url?.trim())
+    );
+
+    if (resources.length > 0) {
+      const { error: resourceError } = await db
+        .from('procedure_resources')
+        .insert(
+          resources.map((resource) => ({
+            procedure_id: data.id,
+            type: resource.type,
+            name: resource.name.trim(),
+            url: resource.url.trim(),
+          }))
+        );
+
+      if (resourceError) {
+        throw new BadRequestException(resourceError.message);
+      }
+    }
+
     return { success: true, id: data.id };
   }
 
@@ -304,17 +330,6 @@ export class InstructorDashboardService {
 
     await this.assertInstructorOwnsSection(sectionId, caller.user.id);
 
-    const { data: existingAccess, error: accessError } = await db
-      .from('procedure_section_access')
-      .select('id')
-      .eq('procedure_id', procedureId)
-      .eq('section_id', sectionId)
-      .maybeSingle();
-
-    if (accessError) {
-      throw new BadRequestException(accessError.message);
-    }
-
     const { data: students, error: studentsError } = await db
       .from('students')
       .select('id')
@@ -325,58 +340,47 @@ export class InstructorDashboardService {
     }
 
     const studentIds = (students ?? []).map((student) => student.id);
-    const hasAccess = Boolean(existingAccess);
+    if (studentIds.length === 0) {
+      return { success: true, enabled: false };
+    }
+
+    const { data: existingRows, error: existingRowsError } = await db
+      .from('student_procedures')
+      .select('id')
+      .eq('procedure_id', procedureId)
+      .in('student_id', studentIds);
+
+    if (existingRowsError) {
+      throw new BadRequestException(existingRowsError.message);
+    }
+
+    const hasAccess = (existingRows ?? []).length > 0;
 
     if (hasAccess) {
-      const { error: deleteAccessError } = await db
-        .from('procedure_section_access')
-        .delete()
-        .eq('procedure_id', procedureId)
-        .eq('section_id', sectionId);
-
-      if (deleteAccessError) {
-        throw new BadRequestException(deleteAccessError.message);
-      }
-
-      if (studentIds.length > 0) {
-        const { error } = await db
+      const { error } = await db
         .from('student_procedures')
         .delete()
         .eq('procedure_id', procedureId)
         .in('student_id', studentIds);
 
-        if (error) {
-          throw new BadRequestException(error.message);
-        }
+      if (error) {
+        throw new BadRequestException(error.message);
       }
 
       return { success: true, enabled: false };
     }
 
-    const { error: createAccessError } = await db
-      .from('procedure_section_access')
-      .insert({
+    const { error } = await db.from('student_procedures').upsert(
+      studentIds.map((studentId) => ({
+        student_id: studentId,
         procedure_id: procedureId,
-        section_id: sectionId,
-      });
+        status: 'pending',
+      })),
+      { onConflict: 'student_id,procedure_id', ignoreDuplicates: true }
+    );
 
-    if (createAccessError) {
-      throw new BadRequestException(createAccessError.message);
-    }
-
-    if (studentIds.length > 0) {
-      const { error } = await db.from('student_procedures').upsert(
-        studentIds.map((studentId) => ({
-          student_id: studentId,
-          procedure_id: procedureId,
-          status: 'pending',
-        })),
-        { onConflict: 'student_id,procedure_id', ignoreDuplicates: true }
-      );
-
-      if (error) {
-        throw new BadRequestException(error.message);
-      }
+    if (error) {
+      throw new BadRequestException(error.message);
     }
 
     return { success: true, enabled: true };
@@ -515,36 +519,5 @@ export class InstructorDashboardService {
   private asArray<T>(value: T | T[] | null | undefined): T[] {
     if (!value) return [];
     return Array.isArray(value) ? value : [value];
-  }
-
-  private async syncSectionAccessToStudents(
-    sectionAccess: Array<{ procedureId: string; sectionId: string }>,
-    sections: Array<{ id: string; students: Array<{ id: string }> }>
-  ) {
-    if (sectionAccess.length === 0) return;
-
-    const db = this.supabase.getServiceClient();
-    const sectionToStudents = new Map(
-      sections.map((section) => [section.id, section.students.map((student) => student.id)])
-    );
-
-    const rowsToUpsert = sectionAccess.flatMap((access) =>
-      (sectionToStudents.get(access.sectionId) ?? []).map((studentId) => ({
-        student_id: studentId,
-        procedure_id: access.procedureId,
-        status: 'pending',
-      }))
-    );
-
-    if (rowsToUpsert.length === 0) return;
-
-    const { error } = await db.from('student_procedures').upsert(rowsToUpsert, {
-      onConflict: 'student_id,procedure_id',
-      ignoreDuplicates: true,
-    });
-
-    if (error) {
-      throw new BadRequestException(error.message);
-    }
   }
 }

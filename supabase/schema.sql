@@ -65,6 +65,19 @@ ALTER TABLE public.procedures ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "procedures_read"   ON public.procedures FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.status = 'approved'));
 CREATE POLICY "procedures_manage" ON public.procedures FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role IN ('instructor','admin') AND p.status = 'approved'));
 
+-- procedure_resources
+CREATE TABLE public.procedure_resources (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  procedure_id UUID NOT NULL REFERENCES public.procedures(id) ON DELETE CASCADE,
+  type         TEXT NOT NULL CHECK (type IN ('file','link')),
+  name         TEXT NOT NULL,
+  url          TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE public.procedure_resources ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "procedure_resources_read"   ON public.procedure_resources FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.status = 'approved'));
+CREATE POLICY "procedure_resources_manage" ON public.procedure_resources FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role IN ('instructor','admin') AND p.status = 'approved'));
+
 -- student_procedures
 CREATE TABLE public.student_procedures (
   id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

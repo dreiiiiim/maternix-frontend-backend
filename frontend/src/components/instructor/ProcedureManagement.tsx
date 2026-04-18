@@ -11,6 +11,7 @@ type Procedure = {
   name: string
   category: string
   description: string
+  resources: { type: 'file' | 'link'; name: string; url: string }[]
 }
 
 type Student = {
@@ -35,12 +36,6 @@ type StudentProcedure = {
   notes: string | null
 }
 
-type SectionAccess = {
-  procedureId: string
-  sectionId: string
-  createdAt: string
-}
-
 type EvaluationPayload = {
   evaluations?: Record<string, 'performed' | 'not-performed' | null>
   feedback?: string
@@ -57,7 +52,6 @@ export function ProcedureManagement() {
   const [procedures, setProcedures] = useState<Procedure[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [spRows, setSpRows] = useState<StudentProcedure[]>([])
-  const [sectionAccess, setSectionAccess] = useState<SectionAccess[]>([])
 
   const [showAdd, setShowAdd] = useState(false)
   const [newProcedure, setNewProcedure] = useState({
@@ -65,6 +59,8 @@ export function ProcedureManagement() {
     category: 'Clinical Procedure',
     description: '',
   })
+  const [resourceFile, setResourceFile] = useState<File | null>(null)
+  const [resourceLabel, setResourceLabel] = useState('Retdem with rationale')
 
   const [selectedProcedure, setSelectedProcedure] = useState<Procedure | null>(null)
   const [selectedStudent, setSelectedStudent] = useState<{
@@ -89,7 +85,6 @@ export function ProcedureManagement() {
       setSections([])
       setProcedures([])
       setSpRows([])
-      setSectionAccess([])
       setLoading(false)
       return
     }
@@ -107,7 +102,6 @@ export function ProcedureManagement() {
       setSections([])
       setProcedures([])
       setSpRows([])
-      setSectionAccess([])
       setLoading(false)
       return
     }
@@ -115,7 +109,6 @@ export function ProcedureManagement() {
     setSections((payload?.sections ?? []) as Section[])
     setProcedures((payload?.procedures ?? []) as Procedure[])
     setSpRows((payload?.studentProcedures ?? []) as StudentProcedure[])
-    setSectionAccess((payload?.sectionAccess ?? []) as SectionAccess[])
     setLoading(false)
   }, [apiUrl, supabase])
 
@@ -124,9 +117,15 @@ export function ProcedureManagement() {
   }, [fetchData])
 
   const enabledSectionIds = (procedureId: string) =>
-    sectionAccess
-      .filter((access) => access.procedureId === procedureId)
-      .map((access) => access.sectionId)
+    sections
+      .filter((section) =>
+        section.students.some((student) =>
+          spRows.some(
+            (row) => row.student_id === student.id && row.procedure_id === procedureId
+          )
+        )
+      )
+      .map((section) => section.id)
 
   const getSp = (studentId: string, procedureId: string) =>
     spRows.find(
@@ -171,6 +170,7 @@ export function ProcedureManagement() {
   const addProcedure = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
+    setError('')
 
     const {
       data: { session },
@@ -180,6 +180,36 @@ export function ProcedureManagement() {
       setError('You must be logged in to add a procedure.')
       setSaving(false)
       return
+    }
+
+    let resources: Array<{ type: 'file' | 'link'; name: string; url: string }> = []
+
+    if (resourceFile) {
+      const safeName = resourceFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `procedures/${Date.now()}-${safeName}`
+      const { error: uploadError } = await supabase.storage
+        .from('procedure-resources')
+        .upload(path, resourceFile, { upsert: true })
+
+      if (uploadError) {
+        setError(
+          'Procedure saved was stopped because file upload failed. Check if the procedure-resources bucket exists.'
+        )
+        setSaving(false)
+        return
+      }
+
+      const { data } = supabase.storage
+        .from('procedure-resources')
+        .getPublicUrl(path)
+
+      resources = [
+        {
+          type: 'file',
+          name: resourceLabel.trim() || resourceFile.name,
+          url: data.publicUrl,
+        },
+      ]
     }
 
     const response = await fetch(`${apiUrl}/instructor/dashboard/procedures`, {
@@ -192,6 +222,7 @@ export function ProcedureManagement() {
         name: newProcedure.name,
         category: newProcedure.category,
         description: newProcedure.description,
+        resources,
       }),
     })
 
@@ -202,6 +233,8 @@ export function ProcedureManagement() {
 
     setShowAdd(false)
     setNewProcedure({ name: '', category: 'Clinical Procedure', description: '' })
+    setResourceFile(null)
+    setResourceLabel('Retdem with rationale')
     await fetchData()
     setSaving(false)
   }
@@ -468,14 +501,47 @@ export function ProcedureManagement() {
                 }
                 suppressHydrationWarning
               />
-              <button
-                disabled={saving}
-                className="px-4 py-2 text-white rounded-lg"
-                style={{ backgroundColor: 'var(--brand-green-dark)' }}
+              <input
+                className="w-full border rounded-lg p-2"
+                placeholder="Attachment label"
+                value={resourceLabel}
+                onChange={(e) => setResourceLabel(e.target.value)}
                 suppressHydrationWarning
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+              />
+              <input
+                type="file"
+                className="w-full border rounded-lg p-2 bg-white"
+                onChange={(e) => setResourceFile(e.target.files?.[0] ?? null)}
+                suppressHydrationWarning
+              />
+              <div className="flex gap-3">
+                <button
+                  disabled={saving}
+                  className="px-4 py-2 text-white rounded-lg"
+                  style={{ backgroundColor: 'var(--brand-green-dark)' }}
+                  suppressHydrationWarning
+                >
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-2 border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    setShowAdd(false)
+                    setNewProcedure({
+                      name: '',
+                      category: 'Clinical Procedure',
+                      description: '',
+                    })
+                    setResourceFile(null)
+                    setResourceLabel('Retdem with rationale')
+                    setError('')
+                  }}
+                  suppressHydrationWarning
+                >
+                  Cancel
+                </button>
+              </div>
             </form>
           )}
 

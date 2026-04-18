@@ -35,7 +35,16 @@ export class InstructorDashboardController {
   @Post('procedures')
   addProcedure(
     @Body()
-    body: { name?: string; category?: string; description?: string },
+    body: {
+      name?: string;
+      category?: string;
+      description?: string;
+      resources?: Array<{
+        type?: 'file' | 'link';
+        name?: string;
+        url?: string;
+      }>;
+    },
     @Headers('authorization') auth?: string
   ) {
     if (!body.name?.trim()) {
@@ -48,6 +57,7 @@ export class InstructorDashboardController {
         name: body.name,
         category: body.category,
         description: body.description,
+        resources: body.resources,
       },
       token
     );

@@ -80,7 +80,7 @@ export class StudentDashboardService {
     const db = this.supabase.getServiceClient();
     const userId = caller.user.id;
 
-    const [{ data: profile, error: profileError }, { data: studentRecord, error: studentRecordError }, { data: procedures, error: proceduresError }, { data: studentProcedures, error: studentProceduresError }, { data: evaluations, error: evaluationsError }, { data: announcements, error: announcementsError }] =
+    const [{ data: profile, error: profileError }, { data: procedures, error: proceduresError }, { data: studentProcedures, error: studentProceduresError }, { data: evaluations, error: evaluationsError }, { data: announcements, error: announcementsError }] =
       await Promise.all([
         db
           .from('profiles')
@@ -88,14 +88,9 @@ export class StudentDashboardService {
           .eq('id', userId)
           .single(),
         db
-          .from('students')
-          .select('section_id')
-          .eq('id', userId)
-          .maybeSingle(),
-        db
           .from('procedures')
           .select(
-            'id, name, category, description, profiles!created_by(first_name, last_name)'
+            'id, name, category, description, profiles!created_by(first_name, last_name), procedure_resources(type, name, url)'
           )
           .order('created_at', { ascending: false }),
         db
@@ -121,7 +116,6 @@ export class StudentDashboardService {
 
     const firstError =
       profileError ??
-      studentRecordError ??
       proceduresError ??
       studentProceduresError ??
       evaluationsError ??
@@ -134,30 +128,6 @@ export class StudentDashboardService {
     if (!profile) {
       throw new BadRequestException('Student profile not found');
     }
-
-    const sectionId = studentRecord?.section_id ?? null;
-
-    let sectionAccess: Array<{
-      procedure_id: string;
-      created_at: string;
-    }> = [];
-
-    if (sectionId) {
-      const { data: accessData, error: accessError } = await db
-        .from('procedure_section_access')
-        .select('procedure_id, created_at')
-        .eq('section_id', sectionId);
-
-      if (accessError) {
-        throw new BadRequestException(accessError.message);
-      }
-
-      sectionAccess = (accessData ?? []) as typeof sectionAccess;
-    }
-
-    const accessMap = new Map(
-      sectionAccess.map((row) => [row.procedure_id, row.created_at])
-    );
 
     const evalMap = new Map<
       string,
@@ -204,13 +174,8 @@ export class StudentDashboardService {
         category: procedure.category ?? 'Clinical Procedure',
         description: procedure.description ?? null,
         allowedBy: creatorName || null,
-        allowedDate: assigned
-          ? this.formatDate(assigned.created_at)
-          : accessMap.has(procedure.id)
-            ? this.formatDate(accessMap.get(procedure.id))
-            : null,
-        status: (assigned?.status ??
-          (accessMap.has(procedure.id) ? 'pending' : 'locked')) as
+        allowedDate: assigned ? this.formatDate(assigned.created_at) : null,
+        status: (assigned?.status ?? 'locked') as
           | 'pending'
           | 'in_progress'
           | 'completed'
@@ -221,7 +186,11 @@ export class StudentDashboardService {
           : null,
         notes: assigned?.notes ?? null,
         evaluation: evalMap.get(procedure.id) ?? null,
-        resources: [],
+        resources: this.asArray(procedure.procedure_resources).map((resource: any) => ({
+          type: resource.type as 'file' | 'link',
+          name: resource.name as string,
+          url: resource.url as string,
+        })),
       };
     });
 
