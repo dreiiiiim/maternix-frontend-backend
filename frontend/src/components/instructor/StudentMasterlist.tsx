@@ -32,45 +32,9 @@ type SectionRecord = {
   students: StudentRecord[]
 }
 
-type StudentProcedureStatusRow = {
-  student_id: string
-  status: 'pending' | 'in_progress' | 'completed' | 'evaluated'
-}
-
-type RawSectionRow = {
-  id: string
-  name: string
-  semester: string
-  schedule: string | null
-  students:
-    | Array<{
-        id: string
-        student_no: string
-        profiles:
-          | {
-              first_name: string | null
-              last_name: string | null
-              email: string | null
-              phone_number: string | null
-            }
-          | Array<{
-              first_name: string | null
-              last_name: string | null
-              email: string | null
-              phone_number: string | null
-            }>
-          | null
-      }>
-    | null
-}
-
-function asArray<T>(value: T | T[] | null | undefined): T[] {
-  if (!value) return []
-  return Array.isArray(value) ? value : [value]
-}
-
 export function StudentMasterlist() {
   const supabase = useMemo(() => createClient(), [])
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
   const [expandedSections, setExpandedSections] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -88,82 +52,34 @@ export function StudentMasterlist() {
     setError('')
 
     const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
 
-    if (userError || !user) {
+    if (sessionError || !session?.access_token) {
       setSections([])
       setLoading(false)
       return
     }
 
-    const { data: sectionsData, error: sectionsError } = await supabase
-      .from('sections')
-      .select(
-        'id, name, semester, schedule, students(id, student_no, profiles(first_name, last_name, email, phone_number))'
-      )
-      .eq('instructor_id', user.id)
-      .order('name', { ascending: true })
+    const response = await fetch(`${apiUrl}/instructor/dashboard/masterlist`, {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    })
 
-    if (sectionsError) {
-      setError(sectionsError.message)
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      setError(payload?.message ?? 'Failed to load student masterlist.')
       setSections([])
       setLoading(false)
       return
     }
 
-    const rawSections = ((sectionsData ?? []) as RawSectionRow[]).map((section) => ({
-      ...section,
-      students: asArray(section.students),
-    }))
-
-    const allStudentIds = rawSections.flatMap((section) =>
-      section.students.map((student) => student.id)
-    )
-
-    let statusRows: StudentProcedureStatusRow[] = []
-    if (allStudentIds.length > 0) {
-      const { data: spData, error: spError } = await supabase
-        .from('student_procedures')
-        .select('student_id, status')
-        .in('student_id', allStudentIds)
-
-      if (spError) {
-        setError(spError.message)
-      } else {
-        statusRows = (spData ?? []) as StudentProcedureStatusRow[]
-      }
-    }
-
-    const mappedSections: SectionRecord[] = rawSections.map((section) => ({
-      id: section.id,
-      name: section.name,
-      semester: section.semester,
-      schedule: section.schedule ?? 'No schedule',
-      students: section.students.map((student) => {
-        const profile = asArray(student.profiles)[0]
-        const studentStatuses = statusRows.filter((row) => row.student_id === student.id)
-        const totalProcedures = studentStatuses.length
-        const completedProcedures = studentStatuses.filter((row) =>
-          ['completed', 'evaluated'].includes(row.status)
-        ).length
-
-        return {
-          id: student.id,
-          studentNo: student.student_no,
-          name: `${profile?.first_name ?? ''} ${profile?.last_name ?? ''}`.trim() || 'Unnamed student',
-          email: profile?.email ?? 'No email',
-          phone: profile?.phone_number ?? 'No phone number',
-          completedProcedures,
-          totalProcedures,
-        }
-      }),
-    }))
-
-    setSections(mappedSections)
+    setSections((payload?.sections ?? []) as SectionRecord[])
     setLoading(false)
-  }, [supabase])
+  }, [apiUrl, supabase])
 
   useEffect(() => {
     fetchData()
@@ -178,7 +94,10 @@ export function StudentMasterlist() {
         : 0
     )
   const avgCompletion = allCompletionRatios.length
-    ? Math.round(allCompletionRatios.reduce((sum, value) => sum + value, 0) / allCompletionRatios.length)
+    ? Math.round(
+        allCompletionRatios.reduce((sum, value) => sum + value, 0) /
+          allCompletionRatios.length
+      )
     : 0
 
   return (
@@ -201,9 +120,24 @@ export function StudentMasterlist() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {[
-            { label: 'Total Students', value: totalStudents, icon: Users, color: 'var(--brand-green-dark)' },
-            { label: 'Class Sections', value: sections.length, icon: Users, color: 'var(--brand-pink-dark)' },
-            { label: 'Avg. Completion', value: `${avgCompletion}%`, icon: CheckCircle, color: 'var(--brand-green-medium)' },
+            {
+              label: 'Total Students',
+              value: totalStudents,
+              icon: Users,
+              color: 'var(--brand-green-dark)',
+            },
+            {
+              label: 'Class Sections',
+              value: sections.length,
+              icon: Users,
+              color: 'var(--brand-pink-dark)',
+            },
+            {
+              label: 'Avg. Completion',
+              value: `${avgCompletion}%`,
+              icon: CheckCircle,
+              color: 'var(--brand-green-medium)',
+            },
           ].map((stat, i) => (
             <div key={i} className="bg-white border border-border rounded-xl p-6">
               <div className="flex items-center gap-3">
@@ -271,7 +205,10 @@ export function StudentMasterlist() {
                     </div>
                     <div className="ml-4">
                       {isExpanded ? (
-                        <ChevronUp className="w-6 h-6" style={{ color: 'var(--brand-green-dark)' }} />
+                        <ChevronUp
+                          className="w-6 h-6"
+                          style={{ color: 'var(--brand-green-dark)' }}
+                        />
                       ) : (
                         <ChevronDown className="w-6 h-6 text-muted-foreground" />
                       )}
@@ -286,7 +223,9 @@ export function StudentMasterlist() {
                             const pct =
                               student.totalProcedures > 0
                                 ? Math.round(
-                                    (student.completedProcedures / student.totalProcedures) * 100
+                                    (student.completedProcedures /
+                                      student.totalProcedures) *
+                                      100
                                   )
                                 : 0
 
@@ -315,7 +254,8 @@ export function StudentMasterlist() {
                                         <Phone className="w-4 h-4" /> {student.phone}
                                       </div>
                                       <div className="flex items-center gap-2">
-                                        <Calendar className="w-4 h-4" /> Student No: {student.studentNo}
+                                        <Calendar className="w-4 h-4" /> Student No:{' '}
+                                        {student.studentNo}
                                       </div>
                                     </div>
                                   </div>
@@ -331,7 +271,9 @@ export function StudentMasterlist() {
                                     >
                                       {pct}%
                                     </div>
-                                    <div className="text-xs text-muted-foreground">Completion</div>
+                                    <div className="text-xs text-muted-foreground">
+                                      Completion
+                                    </div>
                                   </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4 pt-3 border-t border-border">
@@ -357,7 +299,11 @@ export function StudentMasterlist() {
                                         style={{ color: 'var(--brand-pink-dark)' }}
                                       />
                                       <span className="font-bold text-foreground">
-                                        {Math.max(student.totalProcedures - student.completedProcedures, 0)}
+                                        {Math.max(
+                                          student.totalProcedures -
+                                            student.completedProcedures,
+                                          0
+                                        )}
                                       </span>
                                     </div>
                                     <div className="text-xs text-muted-foreground">Pending</div>

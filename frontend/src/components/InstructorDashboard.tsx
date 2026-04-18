@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { User, Bell, FileText, Users, LogOut } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { AnnouncementForm } from './instructor/AnnouncementForm';
@@ -15,28 +15,36 @@ type TabType = 'announcements' | 'procedures' | 'students';
 
 export function InstructorDashboard() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [activeTab, setActiveTab] = useState<TabType>('announcements');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [instructorName, setInstructorName] = useState('Clinical Instructor');
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) return;
-      supabase
-        .from('profiles')
-        .select('first_name, last_name')
-        .eq('id', data.user.id)
-        .single()
-        .then(({ data: profile }) => {
-          if (profile) {
-              const name = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || 'Clinical Instructor';
-              setInstructorName(name);
-          }
-        });
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    async function loadDashboard() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) return;
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/instructor/dashboard`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) return;
+
+      const payload = await response.json().catch(() => null);
+      if (!payload?.instructor) return;
+
+      setInstructorName(payload.instructor.fullName || 'Clinical Instructor');
+    }
+
+    loadDashboard();
+  }, [supabase]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -51,7 +59,6 @@ export function InstructorDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Dashboard Header */}
       <header className="bg-white border-b border-border sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/instructor/dashboard" className="flex items-center gap-3">
@@ -99,7 +106,6 @@ export function InstructorDashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-12">
-        {/* Welcome Section */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -112,7 +118,6 @@ export function InstructorDashboard() {
           </p>
         </motion.div>
 
-        {/* Tab Navigation */}
         <div className="mb-8 border-b border-border">
           <div className="flex gap-1">
             {tabs.map((tab) => {
@@ -146,7 +151,6 @@ export function InstructorDashboard() {
           </div>
         </div>
 
-        {/* Tab Content */}
         <motion.div
           key={activeTab}
           initial={{ opacity: 0, y: 20 }}

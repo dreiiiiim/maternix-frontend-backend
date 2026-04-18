@@ -14,6 +14,7 @@ type AnnouncementItem = {
 
 export function AnnouncementForm() {
   const supabase = useMemo(() => createClient(), [])
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -34,31 +35,33 @@ export function AnnouncementForm() {
     setError('')
 
     const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
 
-    if (userError || !user) {
+    if (sessionError || !session?.access_token) {
       setAnnouncements([])
       setLoading(false)
       return
     }
 
-    const { data, error: fetchError } = await supabase
-      .from('announcements')
-      .select('id, title, category, created_at')
-      .eq('created_by', user.id)
-      .order('created_at', { ascending: false })
+    const response = await fetch(`${apiUrl}/announcements/mine`, {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    })
 
-    if (fetchError) {
-      setError(fetchError.message)
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      setError(payload?.message ?? 'Failed to load announcements.')
       setAnnouncements([])
     } else {
-      setAnnouncements((data ?? []) as AnnouncementItem[])
+      setAnnouncements((payload?.announcements ?? []) as AnnouncementItem[])
     }
 
     setLoading(false)
-  }, [supabase])
+  }, [apiUrl, supabase])
 
   useEffect(() => {
     fetchAnnouncements()
@@ -70,26 +73,33 @@ export function AnnouncementForm() {
     setSubmitting(true)
 
     const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser()
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
 
-    if (userError || !user) {
+    if (sessionError || !session?.access_token) {
       setError('You must be logged in to post announcements.')
       setSubmitting(false)
       return
     }
 
-    const { error: insertError } = await supabase.from('announcements').insert({
-      title: formData.title,
-      content: formData.content,
-      category: formData.category,
-      target_role: 'student',
-      created_by: user.id,
+    const response = await fetch(`${apiUrl}/announcements`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        title: formData.title,
+        content: formData.content,
+        category: formData.category,
+      }),
     })
 
-    if (insertError) {
-      setError(insertError.message)
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      setError(payload?.message ?? 'Failed to post announcement.')
       setSubmitting(false)
       return
     }
@@ -105,9 +115,26 @@ export function AnnouncementForm() {
     if (!confirm('Are you sure you want to delete this announcement?')) return
     setError('')
 
-    const { error: deleteError } = await supabase.from('announcements').delete().eq('id', id)
-    if (deleteError) {
-      setError(deleteError.message)
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setError('You must be logged in to delete announcements.')
+      return
+    }
+
+    const response = await fetch(`${apiUrl}/announcements/${id}`, {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    })
+
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      setError(payload?.message ?? 'Failed to delete announcement.')
       return
     }
 

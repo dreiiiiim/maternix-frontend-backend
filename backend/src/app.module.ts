@@ -4,6 +4,8 @@ import { SupabaseModule } from './supabase/supabase.module';
 import { EmailModule } from './email/email.module';
 import { AuthModule } from './auth/auth.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { StudentDashboardModule } from './student-dashboard/student-dashboard.module';
+import { InstructorDashboardModule } from './instructor-dashboard/instructor-dashboard.module';
 
 @Module({
   imports: [
@@ -12,6 +14,8 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     EmailModule,
     AuthModule,
     AnnouncementsModule,
+    StudentDashboardModule,
+    InstructorDashboardModule,
   ],
 })
 export class AppModule {}

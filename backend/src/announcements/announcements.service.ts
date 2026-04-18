@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -21,6 +22,90 @@ export class AnnouncementsService {
     private readonly supabase: SupabaseService,
     private readonly email: EmailService
   ) {}
+
+  async getMyAnnouncements(accessToken: string) {
+    const caller = await this.supabase.verifyAndGetProfile(accessToken)
+
+    if (
+      !caller ||
+      caller.profile.status !== 'approved' ||
+      !['instructor', 'admin'].includes(caller.profile.role)
+    ) {
+      throw new UnauthorizedException('Instructor or admin access required')
+    }
+
+    const db = this.supabase.getServiceClient()
+    const { data, error } = await db
+      .from('announcements')
+      .select('id, title, category, created_at')
+      .eq('created_by', caller.user.id)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      throw new BadRequestException(error.message)
+    }
+
+    return { announcements: data ?? [] }
+  }
+
+  async createAnnouncement(
+    dto: { title: string; content: string; category?: string },
+    accessToken: string
+  ) {
+    const caller = await this.supabase.verifyAndGetProfile(accessToken)
+
+    if (
+      !caller ||
+      caller.profile.status !== 'approved' ||
+      !['instructor', 'admin'].includes(caller.profile.role)
+    ) {
+      throw new UnauthorizedException('Instructor or admin access required')
+    }
+
+    const db = this.supabase.getServiceClient()
+    const { data, error } = await db
+      .from('announcements')
+      .insert({
+        title: dto.title.trim(),
+        content: dto.content.trim(),
+        category: dto.category?.trim() || 'Academic',
+        target_role: 'student',
+        created_by: caller.user.id,
+      })
+      .select('id')
+      .single()
+
+    if (error) {
+      throw new BadRequestException(error.message)
+    }
+
+    return { success: true, id: data.id }
+  }
+
+  async deleteAnnouncement(id: string, accessToken: string) {
+    const caller = await this.supabase.verifyAndGetProfile(accessToken)
+
+    if (
+      !caller ||
+      caller.profile.status !== 'approved' ||
+      !['instructor', 'admin'].includes(caller.profile.role)
+    ) {
+      throw new UnauthorizedException('Instructor or admin access required')
+    }
+
+    const db = this.supabase.getServiceClient()
+    const { error } = await db
+      .from('announcements')
+      .delete()
+      .eq('id', id)
+      .eq('created_by', caller.user.id)
+
+    if (error) {
+      throw new BadRequestException(error.message)
+    }
+
+    return { success: true }
+  }
 
   async sendAnnouncementEmail(announcementId: string, accessToken: string) {
     const caller = await this.supabase.verifyAndGetProfile(accessToken)

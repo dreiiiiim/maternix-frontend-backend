@@ -1,113 +1,54 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Bell } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
 
 type PopupAnnouncement = {
   id: string
   title: string
   instructor: string
   date: string
-  preview: string
+  preview?: string
+  content?: string
   category: string
-}
-
-type AnnouncementRow = {
-  id: string
-  title: string
-  content: string
-  category: string
-  created_at: string
-  profiles:
-    | {
-        first_name: string | null
-        last_name: string | null
-      }
-    | Array<{
-        first_name: string | null
-        last_name: string | null
-      }>
-    | null
 }
 
 interface AnnouncementPopupProps {
+  announcements: PopupAnnouncement[]
   onViewAll: () => void
 }
 
-const asArray = <T,>(value: T | T[] | null | undefined): T[] =>
-  !value ? [] : Array.isArray(value) ? value : [value]
-
-export function AnnouncementPopup({ onViewAll }: AnnouncementPopupProps) {
-  const supabase = useMemo(() => createClient(), [])
+export function AnnouncementPopup({ announcements, onViewAll }: AnnouncementPopupProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [recentAnnouncements, setRecentAnnouncements] = useState<PopupAnnouncement[]>([])
 
   useEffect(() => {
     const hasShown = sessionStorage.getItem('announcementPopupShown')
-    if (hasShown) return
+    if (hasShown || announcements.length === 0) return
 
-    async function fetchAnnouncements() {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (!user) return
+    const timer = setTimeout(() => {
+      setIsOpen(true)
+      sessionStorage.setItem('announcementPopupShown', 'true')
+    }, 500)
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
+    return () => clearTimeout(timer)
+  }, [announcements])
 
-        if (!profile?.role) return
-
-        const { data } = await supabase
-          .from('announcements')
-          .select('id, title, content, category, created_at, profiles!announcements_created_by_fkey(first_name, last_name)')
-          .or(`target_role.eq.all,target_role.eq.${profile.role}`)
-          .order('created_at', { ascending: false })
-          .limit(2)
-
-        const mapped = ((data ?? []) as AnnouncementRow[]).map((row) => {
-          const creator = asArray(row.profiles)[0]
-          const authorName = creator ? `${creator.first_name || ''} ${creator.last_name || ''}`.trim() : 'Maternix'
-          return {
-            id: row.id,
-            title: row.title,
-            instructor: authorName || 'Maternix',
-            date: new Date(row.created_at).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            }),
-            preview: row.content.length > 120 ? `${row.content.slice(0, 120)}...` : row.content,
-            category: row.category,
-          }
-        })
-
-        if (mapped.length) {
-          setRecentAnnouncements(mapped)
-          setTimeout(() => {
-            setIsOpen(true)
-            sessionStorage.setItem('announcementPopupShown', 'true')
-          }, 500)
-        }
-      } catch {
-        // Graceful no-popup fallback for session/network issues.
-      }
-    }
-
-    fetchAnnouncements()
-  }, [supabase])
+  const recentAnnouncements = announcements.slice(0, 2).map((announcement) => ({
+    ...announcement,
+    preview:
+      announcement.preview ??
+      ((announcement.content ?? '').length > 120
+        ? `${(announcement.content ?? '').slice(0, 120)}...`
+        : (announcement.content ?? '')),
+  }))
 
   const handleViewAll = () => {
     setIsOpen(false)
     onViewAll()
   }
 
-  if (!isOpen) return null
+  if (!isOpen || recentAnnouncements.length === 0) return null
 
   return (
     <AnimatePresence>

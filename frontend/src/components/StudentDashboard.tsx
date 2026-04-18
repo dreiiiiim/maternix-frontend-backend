@@ -23,8 +23,6 @@ import { useRouter } from 'next/navigation';
 import { AnnouncementPopup } from './AnnouncementPopup';
 import { createClient } from '@/lib/supabase/client';
 
-// ── Types ──────────────────────────────────────────────────────────────────
-
 type EvaluationData = {
   overallScore: number | null;
   maxScore: number | null;
@@ -37,8 +35,10 @@ type EvaluationData = {
 
 type Procedure = {
   id: string;
+  procedureId: string;
   name: string;
   category: string;
+  description: string | null;
   allowedBy: string | null;
   allowedDate: string | null;
   status: 'pending' | 'in_progress' | 'completed' | 'evaluated' | 'locked';
@@ -58,7 +58,24 @@ type DashboardAnnouncement = {
   category: string;
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+type DashboardResponse = {
+  student: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+    role: string;
+  };
+  stats: {
+    totalAllowed: number;
+    evaluated: number;
+    inProgress: number;
+    completed: number;
+    locked: number;
+  };
+  procedures: Procedure[];
+  announcements: DashboardAnnouncement[];
+};
 
 const categoryColors: Record<string, string> = {
   Academic: 'var(--brand-green-dark)',
@@ -68,20 +85,6 @@ const categoryColors: Record<string, string> = {
   Policy: 'var(--brand-green-dark)',
 };
 
-const asArray = <T,>(v: T | T[] | null | undefined): T[] =>
-  !v ? [] : Array.isArray(v) ? v : [v];
-
-const fmt = (iso: string | null | undefined): string | null =>
-  iso
-    ? new Date(iso).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
-    : null;
-
-// ── Component ──────────────────────────────────────────────────────────────
-
 export function StudentDashboard() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -90,6 +93,8 @@ export function StudentDashboard() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [studentName, setStudentName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   const [procedures, setProcedures] = useState<Procedure[]>([]);
   const [announcements, setAnnouncements] = useState<DashboardAnnouncement[]>([]);
@@ -101,106 +106,56 @@ export function StudentDashboard() {
 
   useEffect(() => {
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      setLoading(true);
+      setError('');
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('first_name, last_name, role')
-        .eq('id', user.id)
-        .single();
+      try {
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
 
-      if (profile?.first_name) setStudentName(profile.first_name);
+        if (sessionError) throw sessionError;
+        if (!session?.access_token) {
+          router.push('/login');
+          return;
+        }
 
-      // Fetch student_procedures with nested procedure + creator info
-      const { data: spRows } = await supabase
-        .from('student_procedures')
-        .select(`
-          id, status, notes, completed_at, created_at, procedure_id,
-          procedures(id, name, category, description, profiles!created_by(first_name, last_name))
-        `)
-        .eq('student_id', user.id)
-        .order('created_at', { ascending: false });
-
-      // Fetch evaluations separately (no direct FK from student_procedures → evaluations)
-      const { data: evalRows } = await supabase
-        .from('evaluations')
-        .select('procedure_id, overall_score, max_score, competency_status, feedback, evaluation_date, profiles!instructor_id(first_name, last_name)')
-        .eq('student_id', user.id);
-
-      const evalMap = new Map<string, EvaluationData>();
-      for (const e of (evalRows ?? []) as any[]) {
-        const instr = asArray(e.profiles)[0];
-        const instrName = instr ? `${instr.first_name} ${instr.last_name}`.trim() : null;
-        evalMap.set(e.procedure_id, {
-          overallScore: e.overall_score ?? null,
-          maxScore: e.max_score ?? null,
-          competencyStatus: e.competency_status ?? null,
-          evaluationDate: fmt(e.evaluation_date),
-          evaluatorName: instrName,
-          feedback: e.feedback ?? null,
-          rubric: [],
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+        const response = await fetch(`${apiUrl}/student/dashboard`, {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
         });
+
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(payload?.message ?? 'Failed to load student dashboard.');
+        }
+
+        const data = payload as DashboardResponse;
+        setStudentName(data.student.firstName || data.student.fullName || 'Student');
+        setProcedures(data.procedures);
+        setAnnouncements(data.announcements);
+        setStats([
+          { label: 'Total Procedures Allowed', value: String(data.stats.totalAllowed), icon: CheckCircle, color: 'var(--brand-green-dark)' },
+          { label: 'Evaluated', value: String(data.stats.evaluated), icon: CheckCircle, color: 'var(--brand-green-medium)' },
+          { label: 'In Progress', value: String(data.stats.inProgress), icon: Clock, color: 'var(--brand-pink-dark)' },
+        ]);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load student dashboard.');
+      } finally {
+        setLoading(false);
       }
-
-      const mapped: Procedure[] = ((spRows ?? []) as any[]).map((sp) => {
-        const proc = asArray(sp.procedures)[0];
-        const author = asArray(proc?.profiles)[0];
-        const authorName = author ? `${author.first_name} ${author.last_name}`.trim() : null;
-        return {
-          id: sp.id,
-          name: proc?.name ?? 'Unknown Procedure',
-          category: proc?.category ?? 'Uncategorized',
-          allowedBy: authorName,
-          allowedDate: fmt(sp.created_at),
-          status: sp.status,
-          completedDate: fmt(sp.completed_at),
-          notes: sp.notes ?? null,
-          evaluation: evalMap.get(sp.procedure_id) ?? null,
-          resources: [],
-        };
-      });
-
-      setProcedures(mapped);
-      setStats([
-        { label: 'Total Procedures Allowed', value: String(mapped.length), icon: CheckCircle, color: 'var(--brand-green-dark)' },
-        { label: 'Evaluated', value: String(mapped.filter(p => p.status === 'evaluated').length), icon: CheckCircle, color: 'var(--brand-green-medium)' },
-        { label: 'In Progress', value: String(mapped.filter(p => p.status !== 'evaluated').length), icon: Clock, color: 'var(--brand-pink-dark)' },
-      ]);
-
-      // Fetch announcements
-      const role = profile?.role ?? 'student';
-      const { data: annRows } = await supabase
-        .from('announcements')
-        .select('id, title, content, category, created_at, profiles!announcements_created_by_fkey(first_name, last_name, role)')
-        .or(`target_role.eq.all,target_role.eq.${role}`)
-        .order('created_at', { ascending: false });
-
-      setAnnouncements(
-        ((annRows ?? []) as any[]).map((row) => {
-          const creator = asArray(row.profiles)[0];
-          const creatorName = creator ? `${creator.first_name} ${creator.last_name}`.trim() : 'Maternix';
-          return {
-            id: row.id,
-            title: row.title,
-            instructor: creatorName,
-            role: creator?.role ?? 'instructor',
-            date: fmt(row.created_at) ?? '',
-            content: row.content,
-            category: row.category,
-          };
-        })
-      );
     }
 
     load();
-  }, [supabase]);
+  }, [router, supabase]);
 
   return (
     <div className="min-h-screen bg-background">
-      <AnnouncementPopup onViewAll={() => setShowAnnouncements(true)} />
+      <AnnouncementPopup announcements={announcements} onViewAll={() => setShowAnnouncements(true)} />
 
-      {/* Dashboard Header */}
       <header className="bg-white border-b border-border sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/student/dashboard" className="flex items-center gap-3">
@@ -272,7 +227,6 @@ export function StudentDashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-6 py-12">
-        {/* Welcome Section */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -285,7 +239,12 @@ export function StudentDashboard() {
           </p>
         </motion.div>
 
-        {/* Stats Grid */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-red-700">
+            {error}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           {stats.map((stat, index) => (
             <motion.div
@@ -307,7 +266,7 @@ export function StudentDashboard() {
                   <stat.icon className="w-6 h-6" style={{ color: stat.color }} />
                 </div>
                 <div>
-                  <div className="text-3xl font-bold text-foreground">{stat.value}</div>
+                  <div className="text-3xl font-bold text-foreground">{loading ? '–' : stat.value}</div>
                   <div className="text-sm text-muted-foreground">{stat.label}</div>
                 </div>
               </div>
@@ -315,7 +274,6 @@ export function StudentDashboard() {
           ))}
         </div>
 
-        {/* Announcements or Procedures */}
         {showAnnouncements ? (
           <motion.div
             initial={{ y: 20, opacity: 0 }}
@@ -327,7 +285,11 @@ export function StudentDashboard() {
               <Bell className="w-8 h-8" style={{ color: 'var(--brand-pink-dark)' }} />
               <h2 className="text-3xl font-bold text-foreground">Announcements</h2>
             </div>
-            {announcements.length === 0 ? (
+            {loading ? (
+              <div className="bg-white border border-border rounded-2xl p-8 text-center text-muted-foreground">
+                Loading announcements...
+              </div>
+            ) : announcements.length === 0 ? (
               <div className="bg-white border border-border rounded-2xl p-8 text-center text-muted-foreground">
                 No announcements available.
               </div>
@@ -381,7 +343,11 @@ export function StudentDashboard() {
               Procedures you are authorized to perform by your clinical instructors
             </p>
 
-            {procedures.length === 0 ? (
+            {loading ? (
+              <div className="bg-white border border-border rounded-2xl p-12 text-center text-muted-foreground">
+                Loading procedures...
+              </div>
+            ) : procedures.length === 0 ? (
               <div className="bg-white border border-border rounded-2xl p-12 text-center text-muted-foreground">
                 No procedures assigned yet. Your instructor will unlock procedures for you.
               </div>
@@ -538,7 +504,6 @@ export function StudentDashboard() {
         )}
       </div>
 
-      {/* Procedure Detail Modal */}
       {selectedProcedure && (
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6"
