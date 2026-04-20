@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Save, CheckCircle } from 'lucide-react';
 
@@ -17,6 +17,8 @@ type PerformanceCriterion = {
 type StudentEvaluationFormProps = {
   studentName: string;
   procedureName: string;
+  initialFeedback?: string;
+  saveLabel?: string;
   onClose: () => void;
   onSave: (data: unknown) => void;
 };
@@ -226,6 +228,8 @@ const getTotalPoints = (procedureName: string): number => {
 export function StudentEvaluationForm({
   studentName,
   procedureName,
+  initialFeedback,
+  saveLabel = 'Save Evaluation',
   onClose,
   onSave,
 }: StudentEvaluationFormProps) {
@@ -234,8 +238,16 @@ export function StudentEvaluationForm({
   >({});
   const [feedback, setFeedback] = useState('');
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
   const criteria = getProcedureCriteria(procedureName);
   const totalPoints = getTotalPoints(procedureName);
+
+  useEffect(() => {
+    setFeedback(initialFeedback ?? '');
+    setEvaluations({});
+    setSaved(false);
+    setError('');
+  }, [initialFeedback, procedureName, studentName]);
 
   const handleCheckboxChange = (
     criterionId: string,
@@ -248,6 +260,20 @@ export function StudentEvaluationForm({
   };
 
   const handleSave = () => {
+    const missingCriteria = criteria.some((criterion) => {
+      if (criterion.subCriteria) {
+        return criterion.subCriteria.some((sub) => !evaluations[sub.id]);
+      }
+
+      return !evaluations[criterion.id.toString()];
+    });
+
+    if (missingCriteria) {
+      setError('Please mark every item as Performed or Not Performed before saving.');
+      return;
+    }
+
+    setError('');
     onSave({ evaluations, feedback });
     setSaved(true);
     setTimeout(() => {
@@ -314,6 +340,11 @@ export function StudentEvaluationForm({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6">
+          {error && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
           <div className="space-y-4">
             {criteria.map((criterion) => (
               <div
@@ -442,7 +473,7 @@ export function StudentEvaluationForm({
                 ) : (
                   <>
                     <Save className="w-5 h-5" />
-                    Save Evaluation
+                    {saveLabel}
                   </>
                 )}
               </button>

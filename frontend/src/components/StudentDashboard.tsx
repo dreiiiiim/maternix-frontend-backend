@@ -104,6 +104,40 @@ export function StudentDashboard() {
     { label: 'In Progress', value: '–', icon: Clock, color: 'var(--brand-pink-dark)' },
   ]);
 
+  const orderedProcedures = useMemo(() => {
+    return [...procedures].sort((a, b) => {
+      const getStatusRank = (status: Procedure['status']) => {
+        switch (status) {
+          case 'evaluated':
+            return 0;
+          case 'pending':
+          case 'in_progress':
+            return 1;
+          case 'completed':
+            return 2;
+          case 'locked':
+            return 3;
+          default:
+            return 4;
+        }
+      };
+
+      return getStatusRank(a.status) - getStatusRank(b.status);
+    });
+  }, [procedures]);
+
+  const getVisibleNote = (procedure: Procedure | null) => {
+    if (!procedure || procedure.status === 'locked') return null;
+
+    const text =
+      procedure.status === 'evaluated'
+        ? procedure.evaluation?.feedback
+        : procedure.notes;
+
+    const trimmed = text?.trim();
+    return trimmed ? trimmed : null;
+  };
+
   useEffect(() => {
     async function load() {
       setLoading(true);
@@ -347,13 +381,13 @@ export function StudentDashboard() {
               <div className="bg-white border border-border rounded-2xl p-12 text-center text-muted-foreground">
                 Loading procedures...
               </div>
-            ) : procedures.length === 0 ? (
+            ) : orderedProcedures.length === 0 ? (
               <div className="bg-white border border-border rounded-2xl p-12 text-center text-muted-foreground">
                 No procedures assigned yet. Your instructor will unlock procedures for you.
               </div>
             ) : (
               <div className="space-y-4">
-                {procedures.map((procedure, index) => (
+                {orderedProcedures.map((procedure, index) => (
                   <motion.div
                     key={procedure.id}
                     initial={{ x: -20, opacity: 0 }}
@@ -468,7 +502,7 @@ export function StudentDashboard() {
                       )}
                     </div>
 
-                    {(procedure.notes || procedure.evaluation?.feedback) && (
+                    {getVisibleNote(procedure) && (
                       <div
                         className="p-3 rounded-lg"
                         style={{
@@ -490,9 +524,7 @@ export function StudentDashboard() {
                               ? 'Evaluator Feedback:'
                               : 'Instructor Notes:'}
                           </span>{' '}
-                          {procedure.status === 'evaluated'
-                            ? procedure.evaluation?.feedback
-                            : procedure.notes}
+                          {getVisibleNote(procedure)}
                         </p>
                       </div>
                     )}
@@ -583,7 +615,7 @@ export function StudentDashboard() {
                 )}
               </div>
 
-              {(selectedProcedure.notes || selectedProcedure.evaluation?.feedback) && (
+              {getVisibleNote(selectedProcedure) && (
                 <div className="mb-6">
                   <h4 className="font-medium text-foreground mb-2">
                     {selectedProcedure.status === 'evaluated'
@@ -601,9 +633,7 @@ export function StudentDashboard() {
                     }}
                   >
                     <p className="text-foreground">
-                      {selectedProcedure.status === 'evaluated'
-                        ? selectedProcedure.evaluation?.feedback
-                        : selectedProcedure.notes}
+                      {getVisibleNote(selectedProcedure)}
                     </p>
                   </div>
                 </div>

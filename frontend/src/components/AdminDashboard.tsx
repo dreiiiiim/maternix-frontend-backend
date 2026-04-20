@@ -69,6 +69,7 @@ const asArray = <T,>(v: T | T[] | null | undefined): T[] =>
 export function AdminDashboard() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
   const [activeTab, setActiveTab] = useState<'sections' | 'instructors' | 'approvals' | 'unassigned'>('sections');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -339,11 +340,34 @@ export function AdminDashboard() {
 
   const handleMoveStudent = async () => {
     if (!movingStudent || !targetSectionId) return;
-    const { error } = await supabase
-      .from('students')
-      .update({ section_id: targetSectionId })
-      .eq('id', movingStudent.id);
-    if (error) { toast.error(error.message); return; }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      toast.error('You must be logged in.');
+      return;
+    }
+
+    const response = await fetch(`${apiUrl}/admin/students/move`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        studentId: movingStudent.id,
+        targetSectionId,
+      }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      toast.error(payload?.message ?? 'Failed to move student.');
+      return;
+    }
+
     setShowMoveModal(false);
     setMovingStudent(null);
     setTargetSectionId(null);
@@ -353,14 +377,31 @@ export function AdminDashboard() {
 
   const handleBulkAssignStudents = async (targetId: string) => {
     if (selectedUnassignedStudents.length === 0 || !targetId) return;
-    
-    const { error } = await supabase
-      .from('students')
-      .update({ section_id: targetId })
-      .in('id', selectedUnassignedStudents);
 
-    if (error) {
-      toast.error(error.message);
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      toast.error('You must be logged in.');
+      return;
+    }
+
+    const response = await fetch(`${apiUrl}/admin/students/bulk-assign`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        studentIds: selectedUnassignedStudents,
+        targetSectionId: targetId,
+      }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      toast.error(payload?.message ?? 'Bulk assign failed.');
       return;
     }
 

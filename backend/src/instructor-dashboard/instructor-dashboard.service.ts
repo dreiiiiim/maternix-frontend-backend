@@ -41,6 +41,13 @@ type StudentProcedureRow = {
   notes: string | null;
 };
 
+type EvaluationRow = {
+  id: string;
+  student_id: string;
+  procedure_id: string;
+  feedback: string | null;
+};
+
 type ProcedureRecord = {
   id: string;
   name: string;
@@ -67,6 +74,7 @@ type ProcedureDashboardResponse = {
     }>;
   }>;
   studentProcedures: StudentProcedureRow[];
+  evaluations: EvaluationRow[];
 };
 
 @Injectable()
@@ -231,18 +239,33 @@ export class InstructorDashboardService {
     );
 
     let studentProcedures: StudentProcedureRow[] = [];
+    let evaluations: EvaluationRow[] = [];
 
     if (allStudentIds.length > 0) {
-      const { data: spData, error: spError } = await db
-        .from('student_procedures')
-        .select('id, student_id, procedure_id, status, notes')
-        .in('student_id', allStudentIds);
+      const [
+        { data: spData, error: spError },
+        { data: evaluationData, error: evaluationError },
+      ] = await Promise.all([
+        db
+          .from('student_procedures')
+          .select('id, student_id, procedure_id, status, notes')
+          .in('student_id', allStudentIds),
+        db
+          .from('evaluations')
+          .select('id, student_id, procedure_id, feedback')
+          .in('student_id', allStudentIds),
+      ]);
 
       if (spError) {
         throw new BadRequestException(spError.message);
       }
 
+      if (evaluationError) {
+        throw new BadRequestException(evaluationError.message);
+      }
+
       studentProcedures = (spData ?? []) as StudentProcedureRow[];
+      evaluations = (evaluationData ?? []) as EvaluationRow[];
     }
 
     return {
@@ -259,6 +282,7 @@ export class InstructorDashboardService {
       })),
       sections,
       studentProcedures,
+      evaluations,
     };
   }
 
@@ -318,6 +342,72 @@ export class InstructorDashboardService {
     }
 
     return { success: true, id: data.id };
+  }
+
+  async updateProcedure(
+    procedureId: string,
+    dto: {
+      name: string;
+      category?: string;
+      description?: string;
+      resources?: Array<{
+        type?: 'file' | 'link';
+        name?: string;
+        url?: string;
+      }>;
+    },
+    accessToken: string
+  ) {
+    await this.requireInstructor(accessToken);
+    const db = this.supabase.getServiceClient();
+
+    const { error } = await db
+      .from('procedures')
+      .update({
+        name: dto.name.trim(),
+        category: dto.category?.trim() || 'Clinical Procedure',
+        description: dto.description?.trim() || null,
+      })
+      .eq('id', procedureId);
+
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    const resources = (dto.resources ?? []).filter(
+      (resource): resource is { type: 'file' | 'link'; name: string; url: string } =>
+        (resource.type === 'file' || resource.type === 'link') &&
+        Boolean(resource.name?.trim()) &&
+        Boolean(resource.url?.trim())
+    );
+
+    if (resources.length > 0) {
+      const { error: deleteResourceError } = await db
+        .from('procedure_resources')
+        .delete()
+        .eq('procedure_id', procedureId);
+
+      if (deleteResourceError) {
+        throw new BadRequestException(deleteResourceError.message);
+      }
+
+      const { error: insertResourceError } = await db
+        .from('procedure_resources')
+        .insert(
+          resources.map((resource) => ({
+            procedure_id: procedureId,
+            type: resource.type,
+            name: resource.name.trim(),
+            url: resource.url.trim(),
+          }))
+        );
+
+      if (insertResourceError) {
+        throw new BadRequestException(insertResourceError.message);
+      }
+    }
+
+    return { success: true, id: procedureId };
   }
 
   async toggleSectionAccess(
@@ -433,7 +523,19 @@ export class InstructorDashboardService {
     const competencyStatus =
       score === null ? null : score >= 75 ? 'Competent' : 'Not Yet Competent';
 
-    const { error: evaluationError } = await db.from('evaluations').insert({
+    const { data: existingEvaluation, error: existingEvaluationError } = await db
+      .from('evaluations')
+      .select('id')
+      .eq('student_id', dto.studentId)
+      .eq('procedure_id', dto.procedureId)
+      .eq('instructor_id', caller.user.id)
+      .maybeSingle();
+
+    if (existingEvaluationError) {
+      throw new BadRequestException(existingEvaluationError.message);
+    }
+
+    const evaluationPayload = {
       student_id: dto.studentId,
       procedure_id: dto.procedureId,
       instructor_id: caller.user.id,
@@ -441,7 +543,20 @@ export class InstructorDashboardService {
       max_score: 100,
       competency_status: competencyStatus,
       feedback: dto.feedback?.trim() || '',
-    });
+    };
+
+    const { error: evaluationError } = existingEvaluation
+      ? await db
+          .from('evaluations')
+          .update({
+            overall_score: evaluationPayload.overall_score,
+            max_score: evaluationPayload.max_score,
+            competency_status: evaluationPayload.competency_status,
+            feedback: evaluationPayload.feedback,
+            evaluation_date: new Date().toISOString(),
+          })
+          .eq('id', existingEvaluation.id)
+      : await db.from('evaluations').insert(evaluationPayload);
 
     if (evaluationError) {
       throw new BadRequestException(evaluationError.message);

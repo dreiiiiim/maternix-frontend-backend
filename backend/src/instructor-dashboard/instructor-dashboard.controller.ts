@@ -63,6 +63,39 @@ export class InstructorDashboardController {
     );
   }
 
+  @Patch('procedures/:procedureId')
+  updateProcedure(
+    @Param('procedureId') procedureId: string,
+    @Body()
+    body: {
+      name?: string;
+      category?: string;
+      description?: string;
+      resources?: Array<{
+        type?: 'file' | 'link';
+        name?: string;
+        url?: string;
+      }>;
+    },
+    @Headers('authorization') auth?: string
+  ) {
+    if (!body.name?.trim()) {
+      throw new BadRequestException('Procedure name is required');
+    }
+
+    const token = auth?.replace('Bearer ', '') ?? '';
+    return this.service.updateProcedure(
+      procedureId,
+      {
+        name: body.name,
+        category: body.category,
+        description: body.description,
+        resources: body.resources,
+      },
+      token
+    );
+  }
+
   @Post('procedures/:procedureId/sections/:sectionId/toggle')
   toggleSectionAccess(
     @Param('procedureId') procedureId: string,

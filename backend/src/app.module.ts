@@ -6,6 +6,7 @@ import { AuthModule } from './auth/auth.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { StudentDashboardModule } from './student-dashboard/student-dashboard.module';
 import { InstructorDashboardModule } from './instructor-dashboard/instructor-dashboard.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { InstructorDashboardModule } from './instructor-dashboard/instructor-das
     AnnouncementsModule,
     StudentDashboardModule,
     InstructorDashboardModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

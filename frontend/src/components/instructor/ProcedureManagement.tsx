@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Lock, Plus, Send, Unlock } from 'lucide-react'
+import { ArrowLeft, Edit2, Lock, Send, Unlock } from 'lucide-react'
 import { StudentEvaluationForm } from './StudentEvaluationForm'
 import { createClient } from '@/lib/supabase/client'
 
@@ -36,6 +36,13 @@ type StudentProcedure = {
   notes: string | null
 }
 
+type EvaluationRecord = {
+  id: string
+  student_id: string
+  procedure_id: string
+  feedback: string | null
+}
+
 type EvaluationPayload = {
   evaluations?: Record<string, 'performed' | 'not-performed' | null>
   feedback?: string
@@ -52,9 +59,10 @@ export function ProcedureManagement() {
   const [procedures, setProcedures] = useState<Procedure[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [spRows, setSpRows] = useState<StudentProcedure[]>([])
+  const [evaluationRows, setEvaluationRows] = useState<EvaluationRecord[]>([])
 
-  const [showAdd, setShowAdd] = useState(false)
-  const [newProcedure, setNewProcedure] = useState({
+  const [editingProcedureId, setEditingProcedureId] = useState<string | null>(null)
+  const [procedureForm, setProcedureForm] = useState({
     name: '',
     category: 'Clinical Procedure',
     description: '',
@@ -66,6 +74,8 @@ export function ProcedureManagement() {
   const [selectedStudent, setSelectedStudent] = useState<{
     student: Student
     procedure: Procedure
+    mode?: 'create' | 'edit'
+    existingFeedback?: string
   } | null>(null)
   const [noteTarget, setNoteTarget] = useState<{
     student: Student
@@ -85,6 +95,7 @@ export function ProcedureManagement() {
       setSections([])
       setProcedures([])
       setSpRows([])
+      setEvaluationRows([])
       setLoading(false)
       return
     }
@@ -102,6 +113,7 @@ export function ProcedureManagement() {
       setSections([])
       setProcedures([])
       setSpRows([])
+      setEvaluationRows([])
       setLoading(false)
       return
     }
@@ -109,6 +121,7 @@ export function ProcedureManagement() {
     setSections((payload?.sections ?? []) as Section[])
     setProcedures((payload?.procedures ?? []) as Procedure[])
     setSpRows((payload?.studentProcedures ?? []) as StudentProcedure[])
+    setEvaluationRows((payload?.evaluations ?? []) as EvaluationRecord[])
     setLoading(false)
   }, [apiUrl, supabase])
 
@@ -129,6 +142,11 @@ export function ProcedureManagement() {
 
   const getSp = (studentId: string, procedureId: string) =>
     spRows.find(
+      (row) => row.student_id === studentId && row.procedure_id === procedureId
+    )
+
+  const getEvaluation = (studentId: string, procedureId: string) =>
+    evaluationRows.find(
       (row) => row.student_id === studentId && row.procedure_id === procedureId
     )
 
@@ -167,8 +185,33 @@ export function ProcedureManagement() {
     setSaving(false)
   }
 
-  const addProcedure = async (e: React.FormEvent) => {
+  const openEditProcedure = (procedure: Procedure) => {
+    setEditingProcedureId(procedure.id)
+    setProcedureForm({
+      name: procedure.name,
+      category: procedure.category || 'Clinical Procedure',
+      description: procedure.description || '',
+    })
+    setResourceFile(null)
+    setResourceLabel(procedure.resources[0]?.name || 'Retdem with rationale')
+    setError('')
+  }
+
+  const resetProcedureEditor = () => {
+    setEditingProcedureId(null)
+    setProcedureForm({
+      name: '',
+      category: 'Clinical Procedure',
+      description: '',
+    })
+    setResourceFile(null)
+    setResourceLabel('Retdem with rationale')
+  }
+
+  const saveProcedure = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!editingProcedureId) return
+
     setSaving(true)
     setError('')
 
@@ -177,7 +220,7 @@ export function ProcedureManagement() {
     } = await supabase.auth.getSession()
 
     if (!session?.access_token) {
-      setError('You must be logged in to add a procedure.')
+      setError('You must be logged in to update a procedure.')
       setSaving(false)
       return
     }
@@ -212,29 +255,26 @@ export function ProcedureManagement() {
       ]
     }
 
-    const response = await fetch(`${apiUrl}/instructor/dashboard/procedures`, {
-      method: 'POST',
+    const response = await fetch(`${apiUrl}/instructor/dashboard/procedures/${editingProcedureId}`, {
+      method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({
-        name: newProcedure.name,
-        category: newProcedure.category,
-        description: newProcedure.description,
+        name: procedureForm.name,
+        category: procedureForm.category,
+        description: procedureForm.description,
         resources,
       }),
     })
 
     const payload = await response.json().catch(() => null)
     if (!response.ok) {
-      setError(payload?.message ?? 'Failed to add procedure.')
+      setError(payload?.message ?? 'Failed to update procedure.')
     }
 
-    setShowAdd(false)
-    setNewProcedure({ name: '', category: 'Clinical Procedure', description: '' })
-    setResourceFile(null)
-    setResourceLabel('Retdem with rationale')
+    resetProcedureEditor()
     await fetchData()
     setSaving(false)
   }
@@ -334,6 +374,10 @@ export function ProcedureManagement() {
         <StudentEvaluationForm
           studentName={selectedStudent.student.name}
           procedureName={selectedStudent.procedure.name}
+          initialFeedback={selectedStudent.existingFeedback}
+          saveLabel={
+            selectedStudent.mode === 'edit' ? 'Update Evaluation' : 'Save Evaluation'
+          }
           onClose={() => setSelectedStudent(null)}
           onSave={saveEvaluation}
         />
@@ -407,12 +451,34 @@ export function ProcedureManagement() {
                     {section.students.map((student) => {
                       const row = getSp(student.id, selectedProcedure.id)
                       if (!row) return null
+                      const evaluation = getEvaluation(student.id, selectedProcedure.id)
 
                       return (
                         <div key={student.id} className="border rounded-lg p-3">
-                          <div className="font-medium">{student.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {student.email} | {student.phone}
+                          <div className="flex items-start justify-between gap-4">
+                            <div>
+                              <div className="font-medium">{student.name}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {student.email} | {student.phone}
+                              </div>
+                            </div>
+                            {row.status === 'evaluated' && (
+                              <button
+                                className="px-3 py-1 rounded-lg text-sm text-white"
+                                style={{ backgroundColor: 'var(--brand-green-dark)' }}
+                                onClick={() =>
+                                  setSelectedStudent({
+                                    student,
+                                    procedure: selectedProcedure,
+                                    mode: 'edit',
+                                    existingFeedback: evaluation?.feedback ?? '',
+                                  })
+                                }
+                                suppressHydrationWarning
+                              >
+                                Edit
+                              </button>
+                            )}
                           </div>
                           <div className="text-sm mt-2">
                             Status: <b>{row.status}</b>
@@ -423,29 +489,34 @@ export function ProcedureManagement() {
                             </div>
                           )}
                           <div className="mt-2 flex gap-2">
-                            <button
-                              className="px-3 py-1 border rounded-lg text-sm"
-                              onClick={() => {
-                                setNoteTarget({ student, procedure: selectedProcedure })
-                                setNoteText(row.notes ?? '')
-                              }}
-                              suppressHydrationWarning
-                            >
-                              Note
-                            </button>
-                            <button
-                              className="px-3 py-1 rounded-lg text-sm text-white"
-                              style={{ backgroundColor: 'var(--brand-green-dark)' }}
-                              onClick={() =>
-                                setSelectedStudent({
-                                  student,
-                                  procedure: selectedProcedure,
-                                })
-                              }
-                              suppressHydrationWarning
-                            >
-                              Evaluate
-                            </button>
+                            {row.status !== 'evaluated' && (
+                              <button
+                                className="px-3 py-1 border rounded-lg text-sm"
+                                onClick={() => {
+                                  setNoteTarget({ student, procedure: selectedProcedure })
+                                  setNoteText(row.notes ?? '')
+                                }}
+                                suppressHydrationWarning
+                              >
+                                Note
+                              </button>
+                            )}
+                            {row.status !== 'evaluated' && (
+                              <button
+                                className="px-3 py-1 rounded-lg text-sm text-white"
+                                style={{ backgroundColor: 'var(--brand-green-dark)' }}
+                                onClick={() =>
+                                  setSelectedStudent({
+                                    student,
+                                    procedure: selectedProcedure,
+                                    mode: 'create',
+                                  })
+                                }
+                                suppressHydrationWarning
+                              >
+                                Evaluate
+                              </button>
+                            )}
                           </div>
                         </div>
                       )
@@ -459,91 +530,7 @@ export function ProcedureManagement() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-3xl font-bold">Procedure Management</h2>
-            <button
-              className="px-4 py-2 text-white rounded-lg flex items-center gap-2"
-              style={{ backgroundColor: 'var(--brand-green-dark)' }}
-              onClick={() => setShowAdd((v) => !v)}
-              suppressHydrationWarning
-            >
-              <Plus className="w-4 h-4" />
-              Add Procedure
-            </button>
           </div>
-
-          {showAdd && (
-            <form onSubmit={addProcedure} className="bg-white border rounded-xl p-4 mb-6 space-y-3">
-              <input
-                className="w-full border rounded-lg p-2"
-                placeholder="Procedure name"
-                value={newProcedure.name}
-                onChange={(e) =>
-                  setNewProcedure((v) => ({ ...v, name: e.target.value }))
-                }
-                required
-                suppressHydrationWarning
-              />
-              <input
-                className="w-full border rounded-lg p-2"
-                placeholder="Category"
-                value={newProcedure.category}
-                onChange={(e) =>
-                  setNewProcedure((v) => ({ ...v, category: e.target.value }))
-                }
-                required
-                suppressHydrationWarning
-              />
-              <textarea
-                className="w-full border rounded-lg p-2"
-                placeholder="Description"
-                value={newProcedure.description}
-                onChange={(e) =>
-                  setNewProcedure((v) => ({ ...v, description: e.target.value }))
-                }
-                suppressHydrationWarning
-              />
-              <input
-                className="w-full border rounded-lg p-2"
-                placeholder="Attachment label"
-                value={resourceLabel}
-                onChange={(e) => setResourceLabel(e.target.value)}
-                suppressHydrationWarning
-              />
-              <input
-                type="file"
-                className="w-full border rounded-lg p-2 bg-white"
-                onChange={(e) => setResourceFile(e.target.files?.[0] ?? null)}
-                suppressHydrationWarning
-              />
-              <div className="flex gap-3">
-                <button
-                  disabled={saving}
-                  className="px-4 py-2 text-white rounded-lg"
-                  style={{ backgroundColor: 'var(--brand-green-dark)' }}
-                  suppressHydrationWarning
-                >
-                  {saving ? 'Saving...' : 'Save'}
-                </button>
-                <button
-                  type="button"
-                  className="px-4 py-2 border border-border rounded-lg hover:bg-gray-50 transition-colors"
-                  onClick={() => {
-                    setShowAdd(false)
-                    setNewProcedure({
-                      name: '',
-                      category: 'Clinical Procedure',
-                      description: '',
-                    })
-                    setResourceFile(null)
-                    setResourceLabel('Retdem with rationale')
-                    setError('')
-                  }}
-                  suppressHydrationWarning
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
 
           <div className="space-y-3">
             {procedures.map((procedure) => {
@@ -561,7 +548,82 @@ export function ProcedureManagement() {
                         {procedure.category} • {procedure.description}
                       </p>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => openEditProcedure(procedure)}
+                      className="px-4 py-2 border border-border rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                      suppressHydrationWarning
+                    >
+                      <span className="flex items-center gap-2">
+                        <Edit2 className="w-4 h-4" />
+                        Edit
+                      </span>
+                    </button>
                   </div>
+                  {editingProcedureId === procedure.id && (
+                    <form onSubmit={saveProcedure} className="mt-4 border-t border-border pt-4 space-y-3">
+                      <input
+                        className="w-full border rounded-lg p-2"
+                        placeholder="Procedure name"
+                        value={procedureForm.name}
+                        onChange={(e) =>
+                          setProcedureForm((value) => ({ ...value, name: e.target.value }))
+                        }
+                        required
+                        suppressHydrationWarning
+                      />
+                      <input
+                        className="w-full border rounded-lg p-2"
+                        placeholder="Category"
+                        value={procedureForm.category}
+                        onChange={(e) =>
+                          setProcedureForm((value) => ({ ...value, category: e.target.value }))
+                        }
+                        required
+                        suppressHydrationWarning
+                      />
+                      <textarea
+                        className="w-full border rounded-lg p-2"
+                        placeholder="Description"
+                        value={procedureForm.description}
+                        onChange={(e) =>
+                          setProcedureForm((value) => ({ ...value, description: e.target.value }))
+                        }
+                        suppressHydrationWarning
+                      />
+                      <input
+                        className="w-full border rounded-lg p-2"
+                        placeholder="Attachment label"
+                        value={resourceLabel}
+                        onChange={(e) => setResourceLabel(e.target.value)}
+                        suppressHydrationWarning
+                      />
+                      <input
+                        type="file"
+                        className="w-full border rounded-lg p-2 bg-white"
+                        onChange={(e) => setResourceFile(e.target.files?.[0] ?? null)}
+                        suppressHydrationWarning
+                      />
+                      <div className="flex gap-3">
+                        <button
+                          disabled={saving}
+                          className="px-4 py-2 text-white rounded-lg"
+                          style={{ backgroundColor: 'var(--brand-green-dark)' }}
+                          suppressHydrationWarning
+                        >
+                          {saving ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          type="button"
+                          className="px-4 py-2 border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                          onClick={resetProcedureEditor}
+                          suppressHydrationWarning
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
                   <div className="mt-3 flex flex-wrap gap-2">
                     {sections.map((section) => {
                       const has = enabled.includes(section.id)
