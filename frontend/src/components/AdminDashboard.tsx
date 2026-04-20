@@ -8,6 +8,7 @@ import { Users, BookOpen, UserCheck, Settings, LogOut, Plus, Edit2, Trash2, Chec
 import Image from 'next/image';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
+import { signOutAndClearRememberedSession } from '@/lib/supabase/remember-me';
 
 const STUDENT_ID_REGEX = /^NSG-\d{4}-\d{5}$/;
 const EMPLOYEE_ID_REGEX = /^EMP-\d{4}-\d{4}$/;
@@ -50,7 +51,11 @@ type PendingUser = {
   email: string;
   role: 'instructor' | 'student';
   requestedDate: string;
-  section?: string;
+  requestedDateTime: string;
+  studentNo?: string;
+  sectionName?: string;
+  employeeId?: string;
+  department?: string;
 };
 
 type InstructorOption = {
@@ -63,6 +68,47 @@ type InstructorOption = {
 
 const asArray = <T,>(v: T | T[] | null | undefined): T[] =>
   !v ? [] : Array.isArray(v) ? v : [v];
+
+const getApiErrorMessage = (payload: any, fallback: string) => {
+  if (!payload) return fallback;
+  if (typeof payload.message === 'string') return payload.message;
+  if (Array.isArray(payload.message)) return payload.message.join(', ');
+  if (typeof payload.error === 'string') return payload.error;
+  return fallback;
+};
+
+const mapApprovalUser = (
+  p: any
+): PendingUser => {
+  const studentRow = asArray(p.students)[0];
+  const sectionRow = studentRow ? asArray(studentRow.sections)[0] : null;
+  const instructorRow = asArray(p.instructors)[0];
+  const requested = new Date(p.created_at);
+
+  return {
+    id: p.id,
+    firstName: p.first_name,
+    lastName: p.last_name,
+    email: p.email,
+    role: p.role as 'student' | 'instructor',
+    requestedDate: requested.toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    }),
+    requestedDateTime: requested.toLocaleString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }),
+    studentNo: studentRow?.student_no ?? undefined,
+    sectionName: sectionRow?.name ?? undefined,
+    employeeId: instructorRow?.employee_id ?? undefined,
+    department: instructorRow?.department ?? undefined,
+  };
+};
 
 // ── Component ──────────────────────────────────────────────────────────────
 
@@ -83,6 +129,10 @@ export function AdminDashboard() {
   const [movingStudent, setMovingStudent] = useState<Student | null>(null);
   const [targetSectionId, setTargetSectionId] = useState<string | null>(null);
   const [showRemoveAllModal, setShowRemoveAllModal] = useState<Section | null>(null);
+  const [selectedApproval, setSelectedApproval] = useState<PendingUser | null>(null);
+  const [approvalFilter, setApprovalFilter] = useState<'all' | 'student' | 'instructor'>('all');
+  const [approvalActionUserId, setApprovalActionUserId] = useState<string | null>(null);
+  const [approvalActionType, setApprovalActionType] = useState<'approve' | 'reject' | null>(null);
 
   const [sections, setSections] = useState<Section[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -203,30 +253,26 @@ export function AdminDashboard() {
     setApprovalsLoading(true);
     const { data, error } = await supabase
       .from('profiles')
-      .select(`id, first_name, last_name, email, role, created_at, students ( student_no, sections ( name ) )`)
+      .select(`
+        id,
+        first_name,
+        last_name,
+        email,
+        role,
+        created_at,
+        students ( student_no, sections ( name ) ),
+        instructors ( employee_id, department )
+      `)
       .eq('status', 'pending')
       .order('created_at', { ascending: true });
 
     if (!error && data) {
-      setPendingApprovals(
-        data.map((p: any) => {
-          const studentRow = asArray(p.students)[0];
-          const sectionRow = studentRow ? asArray(studentRow.sections)[0] : null;
-          return {
-            id: p.id,
-            firstName: p.first_name,
-            lastName: p.last_name,
-            email: p.email,
-            role: p.role as 'student' | 'instructor',
-            requestedDate: new Date(p.created_at).toLocaleDateString('en-US', {
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric',
-            }),
-            section: sectionRow?.name ?? undefined,
-          };
-        })
+      setPendingApprovals(data.map((p: any) => mapApprovalUser(p)));
+      setSelectedApproval((prev) =>
+        prev && data.some((pending) => pending.id === prev.id) ? prev : null
       );
+    } else if (error) {
+      toast.error(error.message);
     }
     setApprovalsLoading(false);
   }, [supabase]);
@@ -245,7 +291,13 @@ export function AdminDashboard() {
       setDataLoading(false);
     }
     loadAll();
-  }, [fetchSections, fetchStudents, fetchInstructors, fetchInstructorOptions, fetchPendingApprovals]);
+  }, [
+    fetchSections,
+    fetchStudents,
+    fetchInstructors,
+    fetchInstructorOptions,
+    fetchPendingApprovals,
+  ]);
 
   // ── Section CRUD ───────────────────────────────────────────────────────
 
@@ -445,50 +497,93 @@ export function AdminDashboard() {
   // ── Approval actions ───────────────────────────────────────────────────
 
   const handleApprove = async (userId: string) => {
+    setApprovalActionUserId(userId);
+    setApprovalActionType('approve');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/approve`, {
+      if (!session?.access_token) {
+        throw new Error('You must be logged in as admin.');
+      }
+
+      const res = await fetch(`${apiUrl}/auth/approve`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token}`
         },
         body: JSON.stringify({ userId, action: 'approve' }),
       });
-      if (!res.ok) throw new Error((await res.json()).message ?? 'Failed');
-      toast.success('User approved — approval email sent.');
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(getApiErrorMessage(payload, 'Failed to approve user.'));
+
+      if (payload?.emailStatus === 'sent') {
+        toast.success('Approved successfully. Verification email sent.');
+      } else {
+        toast.error('User was not approved because verification email could not be sent.');
+      }
+
       await Promise.all([
         fetchPendingApprovals(),
         fetchStudents(),
         fetchInstructors(),
         fetchSections()
       ]);
+      if (selectedApproval?.id === userId) {
+        setSelectedApproval(null);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not approve user.');
+    } finally {
+      setApprovalActionUserId(null);
+      setApprovalActionType(null);
     }
   };
 
   const handleReject = async (userId: string) => {
+    setApprovalActionUserId(userId);
+    setApprovalActionType('reject');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/approve`, {
+      if (!session?.access_token) {
+        throw new Error('You must be logged in as admin.');
+      }
+
+      const res = await fetch(`${apiUrl}/auth/approve`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session?.access_token}`
         },
         body: JSON.stringify({ userId, action: 'reject' }),
       });
-      if (!res.ok) throw new Error((await res.json()).message ?? 'Failed');
-      toast.success('User rejected — notification email sent.');
-      await fetchPendingApprovals();
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(getApiErrorMessage(payload, 'Failed to reject user.'));
+
+      if (payload?.emailStatus === 'queued') {
+        toast.success('User rejected. Rejection email queued.');
+      } else {
+        toast.success('User rejected.');
+      }
+
+      await Promise.all([
+        fetchPendingApprovals(),
+        fetchStudents(),
+        fetchInstructors(),
+        fetchSections()
+      ]);
+      if (selectedApproval?.id === userId) {
+        setSelectedApproval(null);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not reject user.');
+    } finally {
+      setApprovalActionUserId(null);
+      setApprovalActionType(null);
     }
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await signOutAndClearRememberedSession(supabase);
     router.push('/');
   };
 
@@ -496,7 +591,11 @@ export function AdminDashboard() {
     if (!confirm('Are you sure you want to permanently delete this user account? This action cannot be undone.')) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/remove`, {
+      if (!session?.access_token) {
+        throw new Error('You must be logged in as admin.');
+      }
+
+      const res = await fetch(`${apiUrl}/auth/remove`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -504,7 +603,8 @@ export function AdminDashboard() {
         },
         body: JSON.stringify({ userId }),
       });
-      if (!res.ok) throw new Error((await res.json()).message ?? 'Failed');
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(getApiErrorMessage(payload, 'Failed to remove user.'));
       toast.success('User account permanently deleted.');
       await Promise.all([
         fetchPendingApprovals(),
@@ -521,6 +621,13 @@ export function AdminDashboard() {
 
   const totalStudents = students.length;
   const unassignedStudents = students.filter(s => !s.sectionId);
+  const filteredPendingApprovals = useMemo(
+    () =>
+      approvalFilter === 'all'
+        ? pendingApprovals
+        : pendingApprovals.filter((user) => user.role === approvalFilter),
+    [approvalFilter, pendingApprovals]
+  );
 
   // ── Render ─────────────────────────────────────────────────────────────
 
@@ -530,7 +637,7 @@ export function AdminDashboard() {
       <header className="bg-white border-b border-border sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/admin/dashboard" className="flex items-center gap-3">
-            <Image src="/images/LOGO-removebg-preview.png" alt="Maternix Track" width={120} height={48} className="h-12 w-auto" />
+            <Image src="/images/LOGO-removebg-preview.png" alt="Maternix Track" width={200} height={80} className="h-14 md:h-16 w-auto" />
           </Link>
 
           <div className="flex items-center gap-4">
@@ -1273,8 +1380,8 @@ export function AdminDashboard() {
                           <button onClick={() => setEditingInstructor(instructor)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
                             <Edit2 className="w-5 h-5" style={{ color: 'var(--brand-green-dark)' }} />
                           </button>
-                          <button 
-                            onClick={() => handleRemoveUser(instructor.id)} 
+                          <button
+                            onClick={() => handleRemoveUser(instructor.id)}
                             className="p-2 rounded-lg hover:bg-red-50 transition-colors"
                           >
                             <Trash2 className="w-5 h-5" style={{ color: 'var(--brand-pink-dark)' }} />
@@ -1289,75 +1396,193 @@ export function AdminDashboard() {
           </motion.div>
         )}
 
-        {/* ── User Approvals Tab ────────────────────────────────────────── */}
+        {/* User Approvals Tab */}
         {activeTab === 'approvals' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <h2 className="text-2xl font-bold text-foreground mb-6">Pending User Approvals</h2>
+            <div className="flex flex-col gap-4 mb-6 md:flex-row md:items-center md:justify-between">
+              <h2 className="text-2xl font-bold text-foreground">Pending User Approvals</h2>
+              <div className="flex items-center gap-2">
+                {(['all', 'student', 'instructor'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setApprovalFilter(filter)}
+                    className="px-3 py-2 rounded-lg text-sm font-medium transition-colors border"
+                    style={{
+                      backgroundColor: approvalFilter === filter ? 'var(--brand-green-dark)' : 'white',
+                      color: approvalFilter === filter ? 'white' : 'var(--foreground)',
+                      borderColor: approvalFilter === filter ? 'var(--brand-green-dark)' : 'var(--border)',
+                    }}
+                  >
+                    {filter === 'all' ? 'All' : filter === 'student' ? 'Students' : 'CI'}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {approvalsLoading ? (
               <div className="bg-white border border-border rounded-xl p-12 text-center">
-                <p className="text-muted-foreground">Loading…</p>
+                <p className="text-muted-foreground">Loading...</p>
               </div>
-            ) : pendingApprovals.length === 0 ? (
-              <div className="bg-white border border-border rounded-xl p-12 text-center">
-                <UserCheck className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-                <p className="text-lg text-muted-foreground">No pending approvals</p>
+            ) : filteredPendingApprovals.length === 0 ? (
+              <div className="bg-white border border-border rounded-xl p-12 text-center text-muted-foreground">
+                No pending approvals for this filter.
               </div>
             ) : (
               <div className="space-y-4">
-                {pendingApprovals.map((user) => (
-                  <div key={user.id} className="bg-white border border-border rounded-xl p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-xl font-bold text-foreground">{user.firstName} {user.lastName}</h3>
-                          <span
-                            className="px-3 py-1 rounded-full text-xs text-white"
+                {filteredPendingApprovals.map((user) => {
+                  const isApproveBusy =
+                    approvalActionUserId === user.id && approvalActionType === 'approve';
+                  const isRejectBusy =
+                    approvalActionUserId === user.id && approvalActionType === 'reject';
+
+                  return (
+                    <div key={user.id} className="bg-white border border-border rounded-xl p-6">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <h3 className="text-xl font-bold text-foreground">{user.firstName} {user.lastName}</h3>
+                            <span
+                              className="px-3 py-1 rounded-full text-xs text-white"
+                              style={{
+                                backgroundColor: user.role === 'instructor' ? 'var(--brand-green-dark)' : 'var(--brand-pink-dark)',
+                              }}
+                            >
+                              {user.role === 'instructor' ? 'Clinical Instructor' : 'Student'}
+                            </span>
+                          </div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <p>Email: {user.email}</p>
+                            <p>Requested: {user.requestedDate}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2 lg:justify-end">
+                          <button
+                            onClick={() => setSelectedApproval(user)}
+                            className="px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                          >
+                            View details
+                          </button>
+
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => handleApprove(user.id)}
+                            disabled={isApproveBusy || isRejectBusy}
+                            className="px-4 py-2 text-white rounded-lg flex items-center gap-2 shadow-sm"
                             style={{
-                              backgroundColor: user.role === 'instructor' ? 'var(--brand-green-dark)' : 'var(--brand-pink-dark)',
+                              backgroundColor: 'var(--brand-green-dark)',
+                              opacity: isApproveBusy || isRejectBusy ? 0.7 : 1,
                             }}
                           >
-                            {user.role === 'instructor' ? 'Instructor' : 'Student'}
-                          </span>
+                            <Check className="w-5 h-5" />
+                            {isApproveBusy ? 'Approving...' : 'Approve'}
+                          </motion.button>
+
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => handleReject(user.id)}
+                            disabled={isApproveBusy || isRejectBusy}
+                            className="px-4 py-2 text-white rounded-lg flex items-center gap-2 shadow-sm"
+                            style={{
+                              backgroundColor: 'var(--brand-pink-dark)',
+                              opacity: isApproveBusy || isRejectBusy ? 0.7 : 1,
+                            }}
+                          >
+                            <X className="w-5 h-5" />
+                            {isRejectBusy ? 'Rejecting...' : 'Reject'}
+                          </motion.button>
                         </div>
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <p>Email: {user.email}</p>
-                          <p>Requested: {user.requestedDate}</p>
-                          {user.section && <p>Section: {user.section}</p>}
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => handleApprove(user.id)}
-                          className="px-4 py-2 text-white rounded-lg flex items-center gap-2 shadow-sm"
-                          style={{ backgroundColor: 'var(--brand-green-dark)' }}
-                        >
-                          <Check className="w-5 h-5" />
-                          Approve
-                        </motion.button>
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => handleReject(user.id)}
-                          className="px-4 py-2 text-white rounded-lg flex items-center gap-2 shadow-sm"
-                          style={{ backgroundColor: 'var(--brand-pink-dark)' }}
-                        >
-                          <X className="w-5 h-5" />
-                          Reject
-                        </motion.button>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </motion.div>
+        )}
+        {selectedApproval && (
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+            onClick={() => setSelectedApproval(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-2xl max-w-2xl w-full p-8"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-2xl font-bold text-foreground">Signup Details</h3>
+                <button
+                  onClick={() => setSelectedApproval(null)}
+                  className="p-2 rounded-lg hover:bg-gray-100"
+                >
+                  <X className="w-5 h-5 text-muted-foreground" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Name</p>
+                  <p className="text-foreground">{selectedApproval.firstName} {selectedApproval.lastName}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Role</p>
+                  <p className="text-foreground">
+                    {selectedApproval.role === 'instructor' ? 'Clinical Instructor' : 'Student'}
+                  </p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Email</p>
+                  <p className="text-foreground">{selectedApproval.email}</p>
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Requested At</p>
+                  <p className="text-foreground">{selectedApproval.requestedDateTime}</p>
+                </div>
+
+                {selectedApproval.role === 'student' ? (
+                  <>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Student Number</p>
+                      <p className="text-foreground">{selectedApproval.studentNo ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Section</p>
+                      <p className="text-foreground">{selectedApproval.sectionName ?? '-'}</p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Employee ID</p>
+                      <p className="text-foreground">{selectedApproval.employeeId ?? '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Department</p>
+                      <p className="text-foreground">{selectedApproval.department ?? '-'}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setSelectedApproval(null)}
+                  className="px-5 py-2 rounded-lg border border-border hover:bg-gray-50"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </div>
     </div>

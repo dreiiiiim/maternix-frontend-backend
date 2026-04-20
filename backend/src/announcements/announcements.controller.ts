@@ -6,6 +6,7 @@ import {
   Get,
   Headers,
   Param,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { AnnouncementsService } from './announcements.service';
@@ -52,6 +53,33 @@ export class AnnouncementsController {
   ) {
     const token = auth?.replace('Bearer ', '') ?? '';
     return this.service.deleteAnnouncement(id, token);
+  }
+
+  @Patch(':id')
+  updateAnnouncement(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      title?: string;
+      content?: string;
+      category?: string;
+    },
+    @Headers('authorization') auth?: string
+  ) {
+    if (!body.title?.trim() || !body.content?.trim()) {
+      throw new BadRequestException('title and content are required');
+    }
+
+    const token = auth?.replace('Bearer ', '') ?? '';
+    return this.service.updateAnnouncement(
+      id,
+      {
+        title: body.title,
+        content: body.content,
+        category: body.category,
+      },
+      token
+    );
   }
 
   @Post('email')

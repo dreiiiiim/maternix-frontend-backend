@@ -52,3 +52,7 @@ desktop.ini
 # TypeScript
 *.tsbuildinfo
 frontend/next-env.d.ts
+
+
+#Supabase
+BACKEND_PLAN.md

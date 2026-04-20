@@ -2,12 +2,12 @@
 
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Clock, Mail, LogOut } from 'lucide-react';
+import { Mail, LogOut } from 'lucide-react';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { signOutAndClearRememberedSession } from '@/lib/supabase/remember-me';
 
-export default function PendingApprovalPage() {
+export default function PendingVerificationPage() {
   const router = useRouter();
   const supabase = createClient();
 
@@ -38,15 +38,13 @@ export default function PendingApprovalPage() {
           className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"
           style={{ backgroundColor: 'var(--brand-pink-light)' }}
         >
-          <Clock className="w-10 h-10" style={{ color: 'var(--brand-pink-dark)' }} />
+          <Mail className="w-10 h-10" style={{ color: 'var(--brand-pink-dark)' }} />
         </div>
 
-        <h1 className="text-3xl font-bold text-foreground mb-3">
-          Account Pending Approval
-        </h1>
+        <h1 className="text-3xl font-bold text-foreground mb-3">Check Your Email</h1>
         <p className="text-muted-foreground text-lg mb-8 leading-relaxed">
-          Your registration has been received. An administrator will review your
-          account and you&apos;ll receive an email notification once a decision is made.
+          Your account has been approved! We sent a verification link to your registered email
+          address. Click the link in that email to activate your account.
         </p>
 
         <div
@@ -60,10 +58,10 @@ export default function PendingApprovalPage() {
             <Mail className="w-5 h-5 text-white" />
           </div>
           <div>
-            <p className="font-medium text-foreground mb-1">Check your inbox</p>
+            <p className="font-medium text-foreground mb-1">Didn&apos;t receive the email?</p>
             <p className="text-sm text-muted-foreground">
-              You&apos;ll receive an email when your account is approved or if any
-              additional information is needed.
+              Check your spam or junk folder. If you still can&apos;t find it, contact your
+              administrator.
             </p>
           </div>
         </div>

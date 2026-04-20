@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { ApproveDto } from './dto/approve.dto';
@@ -22,6 +22,12 @@ export class AuthController {
   approve(@Body() dto: ApproveDto, @Headers('authorization') auth?: string) {
     const token = auth?.replace('Bearer ', '') ?? ''
     return this.authService.approveUser(dto, token)
+  }
+
+  /** Public — validates email verification token sent in approval email. */
+  @Get('verify')
+  verifyEmail(@Query('token') token: string) {
+    return this.authService.verifyEmail(token)
   }
 
   @Post('remove')

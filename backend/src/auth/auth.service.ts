@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { EmailService } from '../email/email.service';
 import {
@@ -78,6 +79,7 @@ export class AuthService {
         email: dto.email,
         role: dto.role,
         status: 'pending',
+        email_verified: false,
       },
       { onConflict: 'id' }
     )
@@ -126,7 +128,7 @@ export class AuthService {
     } catch (error: any) {
       await db.from('profiles').delete().eq('id', userId)
       await db.auth.admin.deleteUser(userId)
-      
+
       let errMsg = 'Registration failed'
       if (error instanceof Error) {
         errMsg = error.message
@@ -135,7 +137,7 @@ export class AuthService {
       } else {
         errMsg = String(error)
       }
-      
+
       // Map raw Postgres unique constraint errors to user-friendly messages
       if (errMsg.includes('students_student_no_key')) {
         errMsg = 'This Student Number is already registered.'
@@ -144,13 +146,12 @@ export class AuthService {
       } else if (errMsg.includes('profiles_email_key') || errMsg.includes('already exists')) {
         errMsg = 'An account with this information already exists.'
       }
-      
+
       throw new BadRequestException(errMsg)
     }
 
     const fullName = `${dto.firstName} ${dto.lastName}`.trim();
     // Fire-and-forget — email failure must NOT block account creation.
-    // The admin can still see and approve the account via the dashboard.
     this.email
       .sendEmail(
         this.config.get<string>('ADMIN_EMAIL')!,
@@ -183,10 +184,10 @@ export class AuthService {
 
     const db = this.supabase.getServiceClient()
 
-    // 1. Fetch the profile details first to know who to email
+    // Fetch profile details first
     const { data: profile, error } = await db
       .from('profiles')
-      .select('first_name, last_name, email')
+      .select('first_name, last_name, email, role, status')
       .eq('id', dto.userId)
       .single()
 
@@ -194,48 +195,96 @@ export class AuthService {
       throw new BadRequestException(error?.message ?? 'Profile not found')
     }
 
-    // 2. Perform the database action
+    const appUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000'
+    const userName = `${profile.first_name} ${profile.last_name}`.trim();
+    const roleLabel = profile.role === 'instructor' ? 'Clinical Instructor' : 'Nursing Student'
+
     if (dto.action === ApproveAction.APPROVE) {
+      if (profile.status !== 'pending') {
+        throw new BadRequestException('Only pending users can be approved.')
+      }
+
+      const verificationToken = randomUUID()
+
       const { error: updateError } = await db
         .from('profiles')
-        .update({ status: 'approved' })
+        .update({ status: 'approved', verification_token: verificationToken })
         .eq('id', dto.userId)
 
       if (updateError) throw new BadRequestException(updateError.message)
-    } else {
-      // If rejecting, fully delete the user from Supabase Auth.
-      // Since our schema uses ON DELETE CASCADE, this automatically wipes their
-      // row from 'profiles', 'students', and 'instructors' so they can try to sign up again freely.
-      const { error: deleteError } = await db.auth.admin.deleteUser(dto.userId)
-      if (deleteError) throw new BadRequestException(deleteError.message)
-    }
 
-    const appUrl = this.config.get<string>('FRONTEND_URL') ?? 'http://localhost:3000'
+      const verifyUrl = `${appUrl}/verify?token=${verificationToken}`
 
-    const userName = `${profile.first_name} ${profile.last_name}`.trim();
-
-    // Fire-and-forget — email failure must NOT block the approve/reject action.
-    if (dto.action === ApproveAction.APPROVE) {
-      this.email
-        .sendEmail(
+      try {
+        await this.email.sendEmail(
           profile.email,
-          'Your Maternix Track account is approved',
-          accountApprovedEmail({ userName, appUrl }),
+          'Your Maternix Track account is approved - verify your email',
+          accountApprovedEmail({ userName, verifyUrl, roleLabel }),
           'approved'
         )
-        .catch((err) => console.warn('Approval email failed (non-fatal):', err?.message ?? err))
-    } else {
-      this.email
-        .sendEmail(
-          profile.email,
-          'Maternix Track - Account update',
-          accountRejectedEmail({ userName, reason: dto.reason }),
-          'rejected'
+      } catch (err) {
+        await db
+          .from('profiles')
+          .update({ status: 'pending', verification_token: null })
+          .eq('id', dto.userId)
+
+        throw new BadRequestException(
+          err instanceof Error
+            ? err.message
+            : 'Approval email failed. Approval was reverted to pending.'
         )
-        .catch((err) => console.warn('Rejection email failed (non-fatal):', err?.message ?? err))
+      }
+
+      return { success: true, emailStatus: 'sent' }
     }
 
-    return { success: true }
+    const { error: deleteError } = await db.auth.admin.deleteUser(dto.userId)
+    if (deleteError) throw new BadRequestException(deleteError.message)
+
+    this.email
+      .sendEmail(
+        profile.email,
+        'Maternix Track - Account update',
+        accountRejectedEmail({ userName, reason: dto.reason }),
+        'rejected'
+      )
+      .catch((err) => console.warn('Rejection email failed (non-fatal):', err?.message ?? err))
+
+    return { success: true, emailStatus: 'queued' }
+  }
+
+  async verifyEmail(token: string) {
+    if (!token) throw new BadRequestException('Verification token is required')
+
+    const db = this.supabase.getServiceClient()
+
+    const { data: profile, error } = await db
+      .from('profiles')
+      .select('id, status, email_verified')
+      .eq('verification_token', token)
+      .single()
+
+    if (error || !profile) {
+      throw new BadRequestException('Invalid or expired verification link.')
+    }
+
+    if (profile.status !== 'approved') {
+      throw new BadRequestException('Account is not approved.')
+    }
+
+    if (profile.email_verified) {
+      // Already verified — idempotent success
+      return { success: true, alreadyVerified: true }
+    }
+
+    const { error: updateError } = await db
+      .from('profiles')
+      .update({ email_verified: true, verification_token: null })
+      .eq('id', profile.id)
+
+    if (updateError) throw new BadRequestException(updateError.message)
+
+    return { success: true, alreadyVerified: false }
   }
 
   async removeUser(userId: string, accessToken: string) {

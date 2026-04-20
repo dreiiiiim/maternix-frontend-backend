@@ -16,6 +16,28 @@ type AnnouncementRow = {
   profiles: { full_name: string } | null
 }
 
+type AnnouncementFeedRow = {
+  id: string
+  title: string
+  content: string
+  category: string
+  created_at: string
+  updated_at: string
+  created_by: string
+  profiles:
+    | {
+        full_name: string | null
+        first_name: string | null
+        last_name: string | null
+      }
+    | {
+        full_name: string | null
+        first_name: string | null
+        last_name: string | null
+      }[]
+    | null
+}
+
 @Injectable()
 export class AnnouncementsService {
   constructor(
@@ -37,15 +59,40 @@ export class AnnouncementsService {
     const db = this.supabase.getServiceClient()
     const { data, error } = await db
       .from('announcements')
-      .select('id, title, category, created_at')
-      .eq('created_by', caller.user.id)
+      .select(
+        'id, title, content, category, created_at, updated_at, created_by, profiles!announcements_created_by_fkey(full_name, first_name, last_name)'
+      )
+      .in('target_role', ['student', 'all'])
+      .order('updated_at', { ascending: false })
       .order('created_at', { ascending: false })
 
     if (error) {
       throw new BadRequestException(error.message)
     }
 
-    return { announcements: data ?? [] }
+    const announcements = ((data ?? []) as AnnouncementFeedRow[]).map((row) => {
+      const authorProfile = Array.isArray(row.profiles)
+        ? row.profiles[0]
+        : row.profiles
+      const authorName =
+        authorProfile?.full_name?.trim() ||
+        `${authorProfile?.first_name ?? ''} ${authorProfile?.last_name ?? ''}`.trim() ||
+        'Maternix'
+
+      return {
+        id: row.id,
+        title: row.title,
+        content: row.content,
+        category: row.category,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        createdBy: row.created_by,
+        authorName,
+        isMine: row.created_by === caller.user.id,
+      }
+    })
+
+    return { announcements }
   }
 
   async createAnnouncement(
@@ -105,6 +152,47 @@ export class AnnouncementsService {
     }
 
     return { success: true }
+  }
+
+  async updateAnnouncement(
+    id: string,
+    dto: { title: string; content: string; category?: string },
+    accessToken: string
+  ) {
+    const caller = await this.supabase.verifyAndGetProfile(accessToken)
+
+    if (
+      !caller ||
+      caller.profile.status !== 'approved' ||
+      !['instructor', 'admin'].includes(caller.profile.role)
+    ) {
+      throw new UnauthorizedException('Instructor or admin access required')
+    }
+
+    const db = this.supabase.getServiceClient()
+    const { data, error } = await db
+      .from('announcements')
+      .update({
+        title: dto.title.trim(),
+        content: dto.content.trim(),
+        category: dto.category?.trim() || 'Academic',
+      })
+      .eq('id', id)
+      .eq('created_by', caller.user.id)
+      .select('id')
+      .maybeSingle()
+
+    if (error) {
+      throw new BadRequestException(error.message)
+    }
+
+    if (!data) {
+      throw new NotFoundException(
+        'Announcement not found or you do not have permission to edit it'
+      )
+    }
+
+    return { success: true, id: data.id }
   }
 
   async sendAnnouncementEmail(announcementId: string, accessToken: string) {
