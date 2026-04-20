@@ -15,6 +15,7 @@ type AnnouncementItem = {
 export function AnnouncementForm() {
   const supabase = useMemo(() => createClient(), [])
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+  const networkErrorMessage = `Unable to reach the server at ${apiUrl}. Make sure the backend app is running.`
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -45,23 +46,28 @@ export function AnnouncementForm() {
       return
     }
 
-    const response = await fetch(`${apiUrl}/announcements/mine`, {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
-    })
+    try {
+      const response = await fetch(`${apiUrl}/announcements/mine`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
 
-    const payload = await response.json().catch(() => null)
+      const payload = await response.json().catch(() => null)
 
-    if (!response.ok) {
-      setError(payload?.message ?? 'Failed to load announcements.')
+      if (!response.ok) {
+        setError(payload?.message ?? 'Failed to load announcements.')
+        setAnnouncements([])
+      } else {
+        setAnnouncements((payload?.announcements ?? []) as AnnouncementItem[])
+      }
+    } catch {
+      setError(networkErrorMessage)
       setAnnouncements([])
-    } else {
-      setAnnouncements((payload?.announcements ?? []) as AnnouncementItem[])
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
-  }, [apiUrl, supabase])
+  }, [apiUrl, networkErrorMessage, supabase])
 
   useEffect(() => {
     fetchAnnouncements()
@@ -83,31 +89,36 @@ export function AnnouncementForm() {
       return
     }
 
-    const response = await fetch(`${apiUrl}/announcements`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        title: formData.title,
-        content: formData.content,
-        category: formData.category,
-      }),
-    })
+    try {
+      const response = await fetch(`${apiUrl}/announcements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          title: formData.title,
+          content: formData.content,
+          category: formData.category,
+        }),
+      })
 
-    const payload = await response.json().catch(() => null)
+      const payload = await response.json().catch(() => null)
 
-    if (!response.ok) {
-      setError(payload?.message ?? 'Failed to post announcement.')
-      setSubmitting(false)
-      return
+      if (!response.ok) {
+        setError(payload?.message ?? 'Failed to post announcement.')
+        setSubmitting(false)
+        return
+      }
+
+      setShowSuccess(true)
+      setTimeout(() => setShowSuccess(false), 2500)
+      setFormData({ title: '', content: '', category: 'Academic' })
+      await fetchAnnouncements()
+    } catch {
+      setError(networkErrorMessage)
     }
 
-    setShowSuccess(true)
-    setTimeout(() => setShowSuccess(false), 2500)
-    setFormData({ title: '', content: '', category: 'Academic' })
-    await fetchAnnouncements()
     setSubmitting(false)
   }
 
@@ -124,21 +135,25 @@ export function AnnouncementForm() {
       return
     }
 
-    const response = await fetch(`${apiUrl}/announcements/${id}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
-    })
+    try {
+      const response = await fetch(`${apiUrl}/announcements/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
 
-    const payload = await response.json().catch(() => null)
+      const payload = await response.json().catch(() => null)
 
-    if (!response.ok) {
-      setError(payload?.message ?? 'Failed to delete announcement.')
-      return
+      if (!response.ok) {
+        setError(payload?.message ?? 'Failed to delete announcement.')
+        return
+      }
+
+      setAnnouncements((prev) => prev.filter((item) => item.id !== id))
+    } catch {
+      setError(networkErrorMessage)
     }
-
-    setAnnouncements((prev) => prev.filter((item) => item.id !== id))
   }
 
   return (

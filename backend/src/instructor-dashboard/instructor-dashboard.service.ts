@@ -73,6 +73,15 @@ type ProcedureDashboardResponse = {
       phone: string;
     }>;
   }>;
+  toggleSections: Array<{
+    id: string;
+    name: string;
+    studentCount: number;
+  }>;
+  sectionAccess: Array<{
+    sectionId: string;
+    procedureId: string;
+  }>;
   studentProcedures: StudentProcedureRow[];
   evaluations: EvaluationRow[];
 };
@@ -193,7 +202,8 @@ export class InstructorDashboardService {
     const db = this.supabase.getServiceClient();
 
     const [
-      { data: sectionsData, error: sectionsError },
+      { data: assignedSectionsData, error: assignedSectionsError },
+      { data: toggleSectionsData, error: toggleSectionsError },
       { data: proceduresData, error: proceduresError },
     ] = await Promise.all([
       db
@@ -204,6 +214,10 @@ export class InstructorDashboardService {
         .eq('instructor_id', caller.user.id)
         .order('name', { ascending: true }),
       db
+        .from('sections')
+        .select('id, name, students(id)')
+        .order('name', { ascending: true }),
+      db
         .from('procedures')
         .select(
           'id, name, category, description, procedure_resources(type, name, url)'
@@ -211,12 +225,13 @@ export class InstructorDashboardService {
         .order('created_at', { ascending: false }),
     ]);
 
-    const firstError = sectionsError ?? proceduresError;
+    const firstError =
+      assignedSectionsError ?? toggleSectionsError ?? proceduresError;
     if (firstError) {
       throw new BadRequestException(firstError.message);
     }
 
-    const sections = ((sectionsData ?? []) as any[]).map((section) => ({
+    const sections = ((assignedSectionsData ?? []) as any[]).map((section) => ({
       id: section.id,
       name: section.name,
       students: this.asArray(section.students).map((student: any) => {
@@ -234,12 +249,29 @@ export class InstructorDashboardService {
       }),
     }));
 
+    const rawToggleSections = ((toggleSectionsData ?? []) as any[]).map(
+      (section) => {
+        const students = this.asArray(section.students);
+
+        return {
+          id: section.id as string,
+          name: section.name as string,
+          studentCount: students.length,
+          studentIds: students.map((student: any) => student.id as string),
+        };
+      }
+    );
+
     const allStudentIds = sections.flatMap((section) =>
       section.students.map((student) => student.id)
+    );
+    const toggleStudentIds = rawToggleSections.flatMap(
+      (section) => section.studentIds
     );
 
     let studentProcedures: StudentProcedureRow[] = [];
     let evaluations: EvaluationRow[] = [];
+    let sectionAccess: Array<{ sectionId: string; procedureId: string }> = [];
 
     if (allStudentIds.length > 0) {
       const [
@@ -268,6 +300,51 @@ export class InstructorDashboardService {
       evaluations = (evaluationData ?? []) as EvaluationRow[];
     }
 
+    if (toggleStudentIds.length > 0) {
+      const { data: sectionAccessData, error: sectionAccessError } = await db
+        .from('student_procedures')
+        .select('student_id, procedure_id')
+        .in('student_id', toggleStudentIds);
+
+      if (sectionAccessError) {
+        throw new BadRequestException(sectionAccessError.message);
+      }
+
+      const sectionIdByStudentId = new Map<string, string>();
+      rawToggleSections.forEach((section) => {
+        section.studentIds.forEach((studentId) => {
+          sectionIdByStudentId.set(studentId, section.id);
+        });
+      });
+
+      const seenPairs = new Set<string>();
+      sectionAccess = ((sectionAccessData ?? []) as Array<{
+        student_id: string;
+        procedure_id: string;
+      }>).reduce<Array<{ sectionId: string; procedureId: string }>>(
+        (rows, row) => {
+          const sectionId = sectionIdByStudentId.get(row.student_id);
+          if (!sectionId) {
+            return rows;
+          }
+
+          const pairKey = `${row.procedure_id}:${sectionId}`;
+          if (seenPairs.has(pairKey)) {
+            return rows;
+          }
+
+          seenPairs.add(pairKey);
+          rows.push({
+            sectionId,
+            procedureId: row.procedure_id,
+          });
+
+          return rows;
+        },
+        []
+      );
+    }
+
     return {
       procedures: ((proceduresData ?? []) as any[]).map((procedure) => ({
         id: procedure.id,
@@ -281,6 +358,12 @@ export class InstructorDashboardService {
         })),
       })),
       sections,
+      toggleSections: rawToggleSections.map((section) => ({
+        id: section.id,
+        name: section.name,
+        studentCount: section.studentCount,
+      })),
+      sectionAccess,
       studentProcedures,
       evaluations,
     };
@@ -418,7 +501,7 @@ export class InstructorDashboardService {
     const caller = await this.requireInstructor(accessToken);
     const db = this.supabase.getServiceClient();
 
-    await this.assertInstructorOwnsSection(sectionId, caller.user.id);
+    await this.assertSectionExists(sectionId);
 
     const { data: students, error: studentsError } = await db
       .from('students')
@@ -589,24 +672,20 @@ export class InstructorDashboardService {
     return caller;
   }
 
-  private async assertInstructorOwnsSection(
-    sectionId: string,
-    instructorId: string
-  ) {
+  private async assertSectionExists(sectionId: string) {
     const db = this.supabase.getServiceClient();
     const { data, error } = await db
       .from('sections')
       .select('id')
       .eq('id', sectionId)
-      .eq('instructor_id', instructorId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw new BadRequestException(error.message);
     }
 
     if (!data) {
-      throw new UnauthorizedException('Section access denied');
+      throw new NotFoundException('Section not found');
     }
   }
 

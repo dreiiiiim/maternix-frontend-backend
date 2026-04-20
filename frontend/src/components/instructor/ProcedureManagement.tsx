@@ -28,6 +28,17 @@ type Section = {
   students: Student[]
 }
 
+type ToggleSection = {
+  id: string
+  name: string
+  studentCount: number
+}
+
+type SectionAccessRecord = {
+  sectionId: string
+  procedureId: string
+}
+
 type StudentProcedure = {
   id: string
   student_id: string
@@ -58,6 +69,8 @@ export function ProcedureManagement() {
 
   const [procedures, setProcedures] = useState<Procedure[]>([])
   const [sections, setSections] = useState<Section[]>([])
+  const [toggleSections, setToggleSections] = useState<ToggleSection[]>([])
+  const [sectionAccessRows, setSectionAccessRows] = useState<SectionAccessRecord[]>([])
   const [spRows, setSpRows] = useState<StudentProcedure[]>([])
   const [evaluationRows, setEvaluationRows] = useState<EvaluationRecord[]>([])
 
@@ -93,6 +106,8 @@ export function ProcedureManagement() {
 
     if (!session?.access_token) {
       setSections([])
+      setToggleSections([])
+      setSectionAccessRows([])
       setProcedures([])
       setSpRows([])
       setEvaluationRows([])
@@ -111,6 +126,8 @@ export function ProcedureManagement() {
     if (!response.ok) {
       setError(payload?.message ?? 'Failed to load procedure data.')
       setSections([])
+      setToggleSections([])
+      setSectionAccessRows([])
       setProcedures([])
       setSpRows([])
       setEvaluationRows([])
@@ -119,6 +136,8 @@ export function ProcedureManagement() {
     }
 
     setSections((payload?.sections ?? []) as Section[])
+    setToggleSections((payload?.toggleSections ?? []) as ToggleSection[])
+    setSectionAccessRows((payload?.sectionAccess ?? []) as SectionAccessRecord[])
     setProcedures((payload?.procedures ?? []) as Procedure[])
     setSpRows((payload?.studentProcedures ?? []) as StudentProcedure[])
     setEvaluationRows((payload?.evaluations ?? []) as EvaluationRecord[])
@@ -150,9 +169,17 @@ export function ProcedureManagement() {
       (row) => row.student_id === studentId && row.procedure_id === procedureId
     )
 
+  const sectionAccessLookup = useMemo(
+    () => new Set(sectionAccessRows.map((row) => `${row.procedureId}:${row.sectionId}`)),
+    [sectionAccessRows]
+  )
+
+  const isProcedureEnabledForSection = (procedureId: string, sectionId: string) =>
+    sectionAccessLookup.has(`${procedureId}:${sectionId}`)
+
   const toggleSectionAccess = async (procedureId: string, sectionId: string) => {
-    const section = sections.find((s) => s.id === sectionId)
-    if (!section || section.students.length === 0) return
+    const section = toggleSections.find((s) => s.id === sectionId)
+    if (!section || section.studentCount === 0) return
 
     setSaving(true)
 
@@ -534,8 +561,6 @@ export function ProcedureManagement() {
 
           <div className="space-y-3">
             {procedures.map((procedure) => {
-              const enabled = enabledSectionIds(procedure.id)
-
               return (
                 <div key={procedure.id} className="bg-white border rounded-xl p-4">
                   <div className="flex items-start justify-between">
@@ -625,18 +650,21 @@ export function ProcedureManagement() {
                     </form>
                   )}
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {sections.map((section) => {
-                      const has = enabled.includes(section.id)
+                    {toggleSections.map((section) => {
+                      const has = isProcedureEnabledForSection(procedure.id, section.id)
+                      const disabled = saving || section.studentCount === 0
 
                       return (
                         <button
                           key={section.id}
-                          disabled={saving}
+                          disabled={disabled}
                           onClick={() => toggleSectionAccess(procedure.id, section.id)}
                           className="px-2 py-1 rounded text-sm flex items-center gap-1"
                           style={{
                             backgroundColor: has ? 'var(--brand-green-dark)' : '#E5E7EB',
                             color: has ? '#fff' : '#333',
+                            opacity: section.studentCount === 0 ? 0.55 : 1,
+                            cursor: disabled ? 'not-allowed' : 'pointer',
                           }}
                           suppressHydrationWarning
                         >
