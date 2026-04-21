@@ -303,32 +303,36 @@ export class InstructorDashboardService {
         });
       });
 
-      const seenPairs = new Set<string>();
-      sectionAccess = ((sectionAccessData ?? []) as Array<{
+      const sectionStudentCount = new Map<string, number>();
+      rawToggleSections.forEach((section) => {
+        sectionStudentCount.set(section.id, section.studentCount);
+      });
+
+      const coverageByPair = new Map<string, Set<string>>();
+      for (const row of (sectionAccessData ?? []) as Array<{
         student_id: string;
         procedure_id: string;
-      }>).reduce<Array<{ sectionId: string; procedureId: string }>>(
-        (rows, row) => {
-          const sectionId = sectionIdByStudentId.get(row.student_id);
-          if (!sectionId) {
-            return rows;
-          }
+      }>) {
+        const sectionId = sectionIdByStudentId.get(row.student_id);
+        if (!sectionId) {
+          continue;
+        }
 
-          const pairKey = `${row.procedure_id}:${sectionId}`;
-          if (seenPairs.has(pairKey)) {
-            return rows;
-          }
+        const pairKey = `${row.procedure_id}:${sectionId}`;
+        const coveredStudents = coverageByPair.get(pairKey) ?? new Set<string>();
+        coveredStudents.add(row.student_id);
+        coverageByPair.set(pairKey, coveredStudents);
+      }
 
-          seenPairs.add(pairKey);
-          rows.push({
-            sectionId,
-            procedureId: row.procedure_id,
-          });
+      sectionAccess = [];
+      for (const [pairKey, coveredStudents] of coverageByPair.entries()) {
+        const [procedureId, sectionId] = pairKey.split(':');
+        const expectedStudents = sectionStudentCount.get(sectionId) ?? 0;
 
-          return rows;
-        },
-        []
-      );
+        if (expectedStudents > 0 && coveredStudents.size === expectedStudents) {
+          sectionAccess.push({ sectionId, procedureId });
+        }
+      }
     }
 
     return {
@@ -505,7 +509,7 @@ export class InstructorDashboardService {
 
     const { data: existingRows, error: existingRowsError } = await db
       .from('student_procedures')
-      .select('id')
+      .select('student_id')
       .eq('procedure_id', procedureId)
       .in('student_id', studentIds);
 
@@ -513,9 +517,12 @@ export class InstructorDashboardService {
       throw new BadRequestException(existingRowsError.message);
     }
 
-    const hasAccess = (existingRows ?? []).length > 0;
+    const studentsWithAccess = new Set((existingRows ?? []).map((row) => row.student_id));
+    const allStudentsHaveAccess = studentIds.every((studentId) =>
+      studentsWithAccess.has(studentId)
+    );
 
-    if (hasAccess) {
+    if (allStudentsHaveAccess) {
       const { error } = await db
         .from('student_procedures')
         .delete()

@@ -1,39 +1,27 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
 import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
 export class EmailService {
-  private readonly transporter: nodemailer.Transporter
-  private readonly fromAddress: string
+  private readonly brevoApiKey: string
+  private readonly brevoBaseUrl: string
+  private readonly senderEmail: string
+  private readonly senderName: string
+  private readonly timeoutMs: number
 
   constructor(
     private readonly config: ConfigService,
     private readonly supabase: SupabaseService
   ) {
-    const host = this.config.get<string>('SMTP_HOST')
-    const port = Number(this.config.get<string>('SMTP_PORT') ?? 587)
-    const secure = this.config.get<string>('SMTP_SECURE') === 'true'
-    const rejectUnauthorized = this.config.get<string>('SMTP_TLS_REJECT_UNAUTHORIZED')
-
-    this.transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: {
-        user: this.config.get<string>('SMTP_USER'),
-        pass: this.config.get<string>('SMTP_PASS'),
-      },
-      tls: {
-        rejectUnauthorized: rejectUnauthorized !== 'false',
-      },
-    })
-
-    this.fromAddress =
-      this.config.get<string>('EMAIL_FROM') ??
-      this.config.get<string>('SMTP_USER') ??
-      'no-reply@maternix.local'
+    this.brevoApiKey = this.config.get<string>('BREVO_API_KEY') ?? ''
+    this.brevoBaseUrl = (this.config.get<string>('BREVO_BASE_URL') ?? 'https://api.brevo.com').replace(
+      /\/+$/,
+      ''
+    )
+    this.senderEmail = this.config.get<string>('BREVO_SENDER_EMAIL') ?? 'no-reply@maternix.local'
+    this.senderName = this.config.get<string>('BREVO_SENDER_NAME') ?? 'Maternix Track'
+    this.timeoutMs = Number(this.config.get<string>('BREVO_TIMEOUT_MS') ?? 10000)
   }
 
   async sendEmail(
@@ -46,13 +34,7 @@ export class EmailService {
     const db = this.supabase.getServiceClient()
 
     try {
-      await this.transporter.sendMail({
-        from: this.fromAddress,
-        to,
-        subject,
-        html,
-        text,
-      })
+      await this.sendViaBrevo({ to, subject, html, text })
 
       await db
         .from('email_logs')
@@ -70,14 +52,76 @@ export class EmailService {
     }
   }
 
+  private async sendViaBrevo(payload: { to: string; subject: string; html: string; text?: string }) {
+    if (!this.brevoApiKey) {
+      throw new Error('Brevo API key is not configured. Set BREVO_API_KEY.')
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs)
+
+    try {
+      const response = await fetch(`${this.brevoBaseUrl}/v3/smtp/email`, {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+          'api-key': this.brevoApiKey,
+        },
+        body: JSON.stringify({
+          sender: {
+            email: this.senderEmail,
+            name: this.senderName,
+          },
+          to: [{ email: payload.to }],
+          subject: payload.subject,
+          htmlContent: payload.html,
+          textContent: payload.text,
+        }),
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        const responseText = await response.text()
+        const details = this.extractBrevoErrorMessage(responseText)
+        throw new Error(`Brevo API error (${response.status}): ${details}`)
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Brevo request timeout')
+      }
+      throw error
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+
+  private extractBrevoErrorMessage(rawBody: string) {
+    if (!rawBody) return 'Unknown Brevo error'
+    try {
+      const parsed = JSON.parse(rawBody) as { message?: string; code?: string }
+      return parsed.message ?? parsed.code ?? rawBody
+    } catch {
+      return rawBody
+    }
+  }
+
   private toPublicMessage(errorMessage: string) {
     const lowerError = errorMessage.toLowerCase()
 
-    if (lowerError.includes('invalid login') || lowerError.includes('badcredentials')) {
-      return 'Email sending failed: SMTP login rejected. Check SMTP_USER and SMTP_PASS.'
+    if (lowerError.includes('401') || lowerError.includes('403') || lowerError.includes('unauthorized')) {
+      return 'Email sending failed: Brevo API authentication failed. Check BREVO_API_KEY.'
     }
-    if (lowerError.includes('self-signed certificate')) {
-      return 'Email sending failed: TLS certificate validation error. Set SMTP_TLS_REJECT_UNAUTHORIZED=false only for trusted local testing.'
+    if (lowerError.includes('400') || lowerError.includes('422')) {
+      return 'Email sending failed: Brevo rejected the payload. Check sender/recipient email and message content.'
+    }
+    if (
+      lowerError.includes('timeout') ||
+      lowerError.includes('aborterror') ||
+      lowerError.includes('fetch failed') ||
+      lowerError.includes('network')
+    ) {
+      return 'Email sending failed: Brevo service unreachable or timed out.'
     }
 
     return `Email sending failed: ${errorMessage}`

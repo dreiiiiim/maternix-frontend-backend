@@ -113,6 +113,8 @@ export class AuthService {
         )
 
         if (studentError) throw studentError
+
+        await this.syncStudentProceduresFromSection(userId, resolvedSectionId)
       } else if (dto.role === SignupRole.INSTRUCTOR) {
         const { error: instructorError } = await db.from('instructors').upsert(
           {
@@ -303,5 +305,49 @@ export class AuthService {
     if (deleteError) throw new BadRequestException(deleteError.message)
 
     return { success: true }
+  }
+
+  private async syncStudentProceduresFromSection(
+    studentId: string,
+    sectionId: string | null
+  ) {
+    if (!sectionId) return
+
+    const db = this.supabase.getServiceClient()
+
+    const { data: sectionStudents, error: sectionStudentsError } = await db
+      .from('students')
+      .select('id')
+      .eq('section_id', sectionId)
+
+    if (sectionStudentsError) throw sectionStudentsError
+
+    const peerStudentIds = (sectionStudents ?? [])
+      .map((student) => student.id)
+      .filter((id) => id !== studentId)
+
+    if (peerStudentIds.length === 0) return
+
+    const { data: procedureRows, error: procedureRowsError } = await db
+      .from('student_procedures')
+      .select('procedure_id')
+      .in('student_id', peerStudentIds)
+
+    if (procedureRowsError) throw procedureRowsError
+
+    const sectionProcedureIds = [...new Set((procedureRows ?? []).map((row) => row.procedure_id))]
+    if (sectionProcedureIds.length === 0) return
+
+    const { error: insertError } = await db.from('student_procedures').upsert(
+      sectionProcedureIds.map((procedureId) => ({
+        student_id: studentId,
+        procedure_id: procedureId,
+        status: 'pending',
+        notes: null,
+      })),
+      { onConflict: 'student_id,procedure_id', ignoreDuplicates: true }
+    )
+
+    if (insertError) throw insertError
   }
 }
