@@ -3,7 +3,7 @@
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { User, Bell, FileText, Users, LogOut } from 'lucide-react';
+import { Bell, FileText, Users, LogOut } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
@@ -11,8 +11,15 @@ import { signOutAndClearRememberedSession } from '@/lib/supabase/remember-me';
 import { AnnouncementForm } from './instructor/AnnouncementForm';
 import { ProcedureManagement } from './instructor/ProcedureManagement';
 import { StudentMasterlist } from './instructor/StudentMasterlist';
+import { UserAvatar } from './UserAvatar';
 
 type TabType = 'announcements' | 'procedures' | 'students';
+type DashboardPayload = {
+  instructor?: {
+    fullName?: string | null;
+    avatarUrl?: string | null;
+  };
+};
 
 export function InstructorDashboard() {
   const router = useRouter();
@@ -20,6 +27,9 @@ export function InstructorDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('announcements');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [instructorName, setInstructorName] = useState('Clinical Instructor');
+  const [instructorAvatarUrl, setInstructorAvatarUrl] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     async function loadDashboard() {
@@ -38,10 +48,13 @@ export function InstructorDashboard() {
 
       if (!response.ok) return;
 
-      const payload = await response.json().catch(() => null);
+      const payload = (await response.json().catch(() => null)) as
+        | DashboardPayload
+        | null;
       if (!payload?.instructor) return;
 
       setInstructorName(payload.instructor.fullName || 'Clinical Instructor');
+      setInstructorAvatarUrl(payload.instructor.avatarUrl ?? null);
     }
 
     loadDashboard();
@@ -79,12 +92,12 @@ export function InstructorDashboard() {
               style={{ backgroundColor: 'var(--brand-pink-light)' }}
               suppressHydrationWarning
             >
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: 'var(--brand-green-dark)' }}
-              >
-                <User className="w-4 h-4 text-white" />
-              </div>
+              <UserAvatar
+                name={instructorName}
+                avatarUrl={instructorAvatarUrl}
+                sizeClassName="w-8 h-8"
+                fallbackBackgroundColor="var(--brand-green-dark)"
+              />
               <div className="text-sm">
                 <div className="font-medium text-foreground">{instructorName}</div>
                 <div className="text-muted-foreground text-xs">Clinical Instructor</div>

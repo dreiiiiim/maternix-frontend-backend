@@ -8,7 +8,6 @@ import {
   Clock,
   FileText,
   TrendingUp,
-  User,
   ExternalLink,
   Download,
   Link as LinkIcon,
@@ -23,6 +22,7 @@ import { useRouter } from 'next/navigation';
 import { AnnouncementPopup } from './AnnouncementPopup';
 import { createClient } from '@/lib/supabase/client';
 import { signOutAndClearRememberedSession } from '@/lib/supabase/remember-me';
+import { UserAvatar } from './UserAvatar';
 
 type EvaluationData = {
   overallScore: number | null;
@@ -66,6 +66,7 @@ type DashboardResponse = {
     lastName: string;
     fullName: string;
     role: string;
+    avatarUrl: string | null;
   };
   stats: {
     totalAllowed: number;
@@ -94,6 +95,7 @@ export function StudentDashboard() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showAnnouncements, setShowAnnouncements] = useState(false);
   const [studentName, setStudentName] = useState('');
+  const [studentAvatarUrl, setStudentAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -170,6 +172,7 @@ export function StudentDashboard() {
 
         const data = payload as DashboardResponse;
         setStudentName(data.student.firstName || data.student.fullName || 'Student');
+        setStudentAvatarUrl(data.student.avatarUrl ?? null);
         setProcedures(data.procedures);
         setAnnouncements(data.announcements);
         setStats([
@@ -222,12 +225,12 @@ export function StudentDashboard() {
                 className="flex items-center gap-3 px-4 py-2 rounded-lg transition-all hover:shadow-md"
                 style={{ backgroundColor: 'var(--brand-pink-light)' }}
               >
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: 'var(--brand-pink-dark)' }}
-                >
-                  <User className="w-4 h-4 text-white" />
-                </div>
+                <UserAvatar
+                  name={studentName || 'Student'}
+                  avatarUrl={studentAvatarUrl}
+                  sizeClassName="w-8 h-8"
+                  fallbackBackgroundColor="var(--brand-pink-dark)"
+                />
                 <div className="text-sm">
                   <div className="font-medium text-foreground">{studentName || 'Student'}</div>
                   <div className="text-muted-foreground text-xs">Nursing Student</div>

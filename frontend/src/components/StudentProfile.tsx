@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
+import { UserAvatar } from './UserAvatar'
 
 type ProfileForm = {
   firstName: string
@@ -37,7 +38,9 @@ export function StudentProfile() {
   const [info, setInfo] = useState('')
 
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null)
+  const [savedProfilePhoto, setSavedProfilePhoto] = useState<string | null>(null)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [initialFormData, setInitialFormData] = useState<ProfileForm | null>(null)
 
   const [formData, setFormData] = useState<ProfileForm>({
     firstName: '',
@@ -94,7 +97,8 @@ export function StudentProfile() {
       const section = Array.isArray(student.sections) ? student.sections[0] : student.sections
 
       setProfilePhoto(profile.avatar_url ?? null)
-      setFormData({
+      setSavedProfilePhoto(profile.avatar_url ?? null)
+      const loadedFormData = {
         firstName: profile.first_name ?? '',
         lastName: profile.last_name ?? '',
         email: profile.email,
@@ -106,7 +110,10 @@ export function StudentProfile() {
         }),
         studentId: student.student_no,
         section: section?.name ?? '',
-      })
+      }
+
+      setFormData(loadedFormData)
+      setInitialFormData(loadedFormData)
 
       setLoading(false)
     }
@@ -122,30 +129,44 @@ export function StudentProfile() {
     setError('')
     setInfo('')
 
-    let avatarUrl = profilePhoto
+    const updatedFormData: ProfileForm = {
+      ...formData,
+      firstName: formData.firstName.trim(),
+      lastName: formData.lastName.trim(),
+      phone: formData.phone.trim(),
+    }
+
+    if (!updatedFormData.firstName || !updatedFormData.lastName) {
+      setError('First name and last name are required.')
+      setSaving(false)
+      return
+    }
+
+    let avatarUrl = savedProfilePhoto
+    let avatarUploadFailed = false
 
     if (photoFile) {
-      const ext = photoFile.name.split('.').pop() ?? 'jpg'
-      const path = `${userId}.${ext}`
+      const ext = (photoFile.name.split('.').pop() ?? 'jpg').toLowerCase()
+      const path = `${userId}/${Date.now()}.${ext}`
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(path, photoFile, { upsert: true })
+        .upload(path, photoFile)
 
       if (!uploadError) {
         const { data } = supabase.storage.from('avatars').getPublicUrl(path)
         avatarUrl = data.publicUrl
       } else {
-        setInfo('Profile saved, but avatar upload failed. Check if avatars bucket exists.')
+        avatarUploadFailed = true
       }
     }
 
     const { error: updateError } = await supabase
       .from('profiles')
       .update({
-        first_name: formData.firstName,
-        last_name: formData.lastName,
-        full_name: `${formData.firstName} ${formData.lastName}`.trim(),
-        phone_number: formData.phone,
+        first_name: updatedFormData.firstName,
+        last_name: updatedFormData.lastName,
+        full_name: `${updatedFormData.firstName} ${updatedFormData.lastName}`.trim(),
+        phone_number: updatedFormData.phone,
         avatar_url: avatarUrl,
       })
       .eq('id', userId)
@@ -157,23 +178,48 @@ export function StudentProfile() {
     }
 
     setProfilePhoto(avatarUrl ?? null)
+    setSavedProfilePhoto(avatarUrl ?? null)
+    setFormData(updatedFormData)
+    setInitialFormData(updatedFormData)
     setPhotoFile(null)
     setIsEditing(false)
-    if (!info) setInfo('Profile updated successfully.')
+    if (avatarUploadFailed) {
+      setInfo('Profile details were saved, but avatar upload failed. Check if the avatars bucket exists.')
+    } else {
+      setInfo('Profile updated successfully.')
+    }
     setSaving(false)
   }
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload an image file.')
+      return
+    }
+
+    const maxBytes = 5 * 1024 * 1024
+    if (file.size > maxBytes) {
+      setError('Please upload an image smaller than 5MB.')
+      return
+    }
+
+    setError('')
     setPhotoFile(file)
     setProfilePhoto(URL.createObjectURL(file))
   }
 
-  const getInitials = () => {
-    const fn = formData.firstName[0] || ''
-    const ln = formData.lastName[0] || ''
-    return (fn + ln).toUpperCase() || 'ST'
+  const handleCancelEdit = () => {
+    if (initialFormData) {
+      setFormData(initialFormData)
+    }
+    setProfilePhoto(savedProfilePhoto)
+    setPhotoFile(null)
+    setError('')
+    setInfo('')
+    setIsEditing(false)
   }
 
   if (loading) {
@@ -209,9 +255,12 @@ export function StudentProfile() {
             </Link>
             <Link href="/student/dashboard">
               <div className="flex items-center gap-3 px-4 py-2 rounded-lg" style={{ backgroundColor: 'var(--brand-pink-light)' }}>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--brand-pink-dark)' }}>
-                  <User className="w-4 h-4 text-white" />
-                </div>
+                <UserAvatar
+                  name={`${formData.firstName} ${formData.lastName}`.trim() || 'Student'}
+                  avatarUrl={profilePhoto}
+                  sizeClassName="w-8 h-8"
+                  fallbackBackgroundColor="var(--brand-pink-dark)"
+                />
                 <div className="text-sm">
                   <div className="font-medium text-foreground">{formData.firstName} {formData.lastName}</div>
                   <div className="text-muted-foreground text-xs">Nursing Student</div>
@@ -236,7 +285,11 @@ export function StudentProfile() {
             </div>
             {!isEditing && (
               <button
-                onClick={() => setIsEditing(true)}
+                onClick={() => {
+                  setError('')
+                  setInfo('')
+                  setIsEditing(true)
+                }}
                 className="px-6 py-3 text-white rounded-lg transition-all hover:scale-105 flex items-center gap-2"
                 style={{ backgroundColor: 'var(--brand-green-dark)' }}
               >
@@ -258,17 +311,13 @@ export function StudentProfile() {
 
           <div className="flex items-center gap-6 mb-8 pb-8 border-b border-border">
             <div className="relative">
-              <div
-                className="w-24 h-24 rounded-full flex items-center justify-center text-3xl font-bold text-white overflow-hidden"
-                style={{ backgroundColor: 'var(--brand-pink-dark)' }}
-              >
-                {profilePhoto ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={profilePhoto} alt="Profile" className="w-full h-full object-cover" />
-                ) : (
-                  getInitials()
-                )}
-              </div>
+              <UserAvatar
+                name={`${formData.firstName} ${formData.lastName}`.trim() || 'Student'}
+                avatarUrl={profilePhoto}
+                sizeClassName="w-24 h-24"
+                fallbackClassName="text-white text-3xl font-bold"
+                fallbackBackgroundColor="var(--brand-pink-dark)"
+              />
               {isEditing && (
                 <label
                   htmlFor="photo-upload"
@@ -387,7 +436,7 @@ export function StudentProfile() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsEditing(false)}
+                    onClick={handleCancelEdit}
                     className="px-6 py-3 border border-border rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     Cancel

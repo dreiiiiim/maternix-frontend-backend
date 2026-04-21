@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "maternix-frontend",
+  "name": "maternix-frontend-backend2",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-04-21",
   "compatibility_flags": ["nodejs_compat"],
