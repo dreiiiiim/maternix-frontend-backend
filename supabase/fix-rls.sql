@@ -155,13 +155,7 @@ CREATE POLICY "students_read_own"
 
 CREATE POLICY "students_read_instructor"
   ON public.students FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.sections s
-      WHERE s.id = students.section_id
-        AND s.instructor_id = auth.uid()
-    )
-  );
+  USING (public.is_approved_instructor());
 
 CREATE POLICY "students_all_admin"
   ON public.students FOR ALL
@@ -196,15 +190,7 @@ CREATE POLICY "sp_update_own"
 
 CREATE POLICY "sp_read_instructor"
   ON public.student_procedures FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1
-        FROM public.students st
-        JOIN public.sections sec ON sec.id = st.section_id
-       WHERE st.id = student_procedures.student_id
-         AND sec.instructor_id = auth.uid()
-    )
-  );
+  USING (public.is_approved_instructor());
 
 CREATE POLICY "sp_all_admin"
   ON public.student_procedures FOR ALL
@@ -217,7 +203,7 @@ CREATE POLICY "eval_read_student"
 
 CREATE POLICY "eval_read_instructor"
   ON public.evaluations FOR SELECT
-  USING (auth.uid() = instructor_id);
+  USING (public.is_approved_instructor());
 
 CREATE POLICY "eval_insert_instructor"
   ON public.evaluations FOR INSERT
@@ -228,7 +214,7 @@ CREATE POLICY "eval_insert_instructor"
 
 CREATE POLICY "eval_update_instructor"
   ON public.evaluations FOR UPDATE
-  USING (auth.uid() = instructor_id);
+  USING (public.is_approved_instructor());
 
 CREATE POLICY "eval_all_admin"
   ON public.evaluations FOR ALL

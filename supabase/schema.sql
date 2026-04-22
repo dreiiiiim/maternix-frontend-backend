@@ -38,7 +38,7 @@ CREATE TABLE public.students (
 );
 ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "students_own"        ON public.students FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "students_instructor" ON public.students FOR SELECT USING (EXISTS (SELECT 1 FROM public.sections s WHERE s.id = students.section_id AND s.instructor_id = auth.uid()));
+CREATE POLICY "students_instructor" ON public.students FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'instructor' AND p.status = 'approved'));
 CREATE POLICY "students_admin"      ON public.students FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin' AND p.status = 'approved'));
 
 -- instructors
@@ -94,13 +94,7 @@ CREATE TABLE public.student_procedures (
 ALTER TABLE public.student_procedures ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "sp_own"        ON public.student_procedures FOR SELECT USING (auth.uid() = student_id);
 CREATE POLICY "sp_own_update" ON public.student_procedures FOR UPDATE USING (auth.uid() = student_id);
-CREATE POLICY "sp_instructor" ON public.student_procedures FOR SELECT USING (EXISTS (
-  SELECT 1
-  FROM public.students st
-  JOIN public.sections sec ON sec.id = st.section_id
-  WHERE st.id = student_procedures.student_id
-    AND sec.instructor_id = auth.uid()
-));
+CREATE POLICY "sp_instructor" ON public.student_procedures FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'instructor' AND p.status = 'approved'));
 CREATE POLICY "sp_admin"      ON public.student_procedures FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin' AND p.status = 'approved'));
 
 -- evaluations
@@ -118,12 +112,12 @@ CREATE TABLE public.evaluations (
 );
 ALTER TABLE public.evaluations ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "eval_student"    ON public.evaluations FOR SELECT USING (auth.uid() = student_id);
-CREATE POLICY "eval_instructor" ON public.evaluations FOR SELECT USING (auth.uid() = instructor_id);
+CREATE POLICY "eval_instructor" ON public.evaluations FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'instructor' AND p.status = 'approved'));
 CREATE POLICY "eval_insert"     ON public.evaluations FOR INSERT WITH CHECK (
   auth.uid() = instructor_id
   AND EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'instructor' AND p.status = 'approved')
 );
-CREATE POLICY "eval_update"     ON public.evaluations FOR UPDATE USING (auth.uid() = instructor_id);
+CREATE POLICY "eval_update"     ON public.evaluations FOR UPDATE USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'instructor' AND p.status = 'approved'));
 CREATE POLICY "eval_admin"      ON public.evaluations FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin' AND p.status = 'approved'));
 
 -- announcements

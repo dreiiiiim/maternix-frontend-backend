@@ -3,6 +3,26 @@
 
 INSERT INTO public.procedures (id, name, category, description, created_by)
 SELECT
+  '50000000-0000-0000-0000-000000000010',
+  'EINC - Taking Rectal Temperature',
+  'Newborn Care',
+  'Rectal temperature measurement step within the Early and Immediate Newborn Care workflow.',
+  (
+    SELECT id
+    FROM public.profiles
+    WHERE role = 'instructor' AND status = 'approved'
+    ORDER BY created_at ASC
+    LIMIT 1
+  )
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.procedures
+  WHERE id = '50000000-0000-0000-0000-000000000010'
+     OR name = 'EINC - Taking Rectal Temperature'
+);
+
+INSERT INTO public.procedures (id, name, category, description, created_by)
+SELECT
   '50000000-0000-0000-0000-000000000007',
   'EINC - Anthropometric Measurements',
   'Newborn Care',

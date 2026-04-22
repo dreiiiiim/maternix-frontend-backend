@@ -90,6 +90,13 @@ type ProcedureDashboardResponse = {
 
 const BUILT_IN_EINC_PROCEDURES = [
   {
+    id: '50000000-0000-0000-0000-000000000010',
+    name: 'EINC - Taking Rectal Temperature',
+    category: 'Newborn Care',
+    description:
+      "Measurement of newborn body temperature through rectal route to assess temperature and check anal patency.",
+  },
+  {
     id: '50000000-0000-0000-0000-000000000007',
     name: 'EINC - Anthropometric Measurements',
     category: 'Newborn Care',
@@ -101,7 +108,7 @@ const BUILT_IN_EINC_PROCEDURES = [
     name: "EINC - Crede's Prophylaxis",
     category: 'Newborn Care',
     description:
-      "Crede's prophylaxis step within the Early and Immediate Newborn Care workflow.",
+      "Application of ophthalmic ointment to prevent ophthalmia neonatorum in newborns.",
   },
   {
     id: '50000000-0000-0000-0000-000000000009',
@@ -150,7 +157,7 @@ export class InstructorDashboardService {
   async getMasterlist(
     accessToken: string
   ): Promise<{ sections: SectionRecord[] }> {
-    const caller = await this.requireInstructor(accessToken);
+    await this.requireInstructor(accessToken);
     const db = this.supabase.getServiceClient();
 
     const { data: sectionsData, error: sectionsError } = await db
@@ -158,7 +165,6 @@ export class InstructorDashboardService {
       .select(
         'id, name, semester, schedule, students(id, student_no, profiles(first_name, last_name, email, phone_number))'
       )
-      .eq('instructor_id', caller.user.id)
       .order('name', { ascending: true });
 
     if (sectionsError) {
@@ -231,8 +237,7 @@ export class InstructorDashboardService {
     await this.ensureBuiltInProcedures(caller.user.id);
 
     const [
-      { data: assignedSectionsData, error: assignedSectionsError },
-      { data: toggleSectionsData, error: toggleSectionsError },
+      { data: sectionsData, error: sectionsError },
       { data: proceduresData, error: proceduresError },
     ] = await Promise.all([
       db
@@ -240,11 +245,6 @@ export class InstructorDashboardService {
         .select(
           'id, name, students(id, student_no, profiles(first_name, last_name, email, phone_number))'
         )
-        .eq('instructor_id', caller.user.id)
-        .order('name', { ascending: true }),
-      db
-        .from('sections')
-        .select('id, name, students(id)')
         .order('name', { ascending: true }),
       db
         .from('procedures')
@@ -254,13 +254,12 @@ export class InstructorDashboardService {
         .order('created_at', { ascending: false }),
     ]);
 
-    const firstError =
-      assignedSectionsError ?? toggleSectionsError ?? proceduresError;
+    const firstError = sectionsError ?? proceduresError;
     if (firstError) {
       throw new BadRequestException(firstError.message);
     }
 
-    const sections = ((assignedSectionsData ?? []) as any[]).map((section) => ({
+    const sections = ((sectionsData ?? []) as any[]).map((section) => ({
       id: section.id,
       name: section.name,
       students: this.asArray(section.students).map((student: any) => {
@@ -278,18 +277,12 @@ export class InstructorDashboardService {
       }),
     }));
 
-    const rawToggleSections = ((toggleSectionsData ?? []) as any[]).map(
-      (section) => {
-        const students = this.asArray(section.students);
-
-        return {
-          id: section.id as string,
-          name: section.name as string,
-          studentCount: students.length,
-          studentIds: students.map((student: any) => student.id as string),
-        };
-      }
-    );
+    const rawToggleSections = sections.map((section) => ({
+      id: section.id,
+      name: section.name,
+      studentCount: section.students.length,
+      studentIds: section.students.map((student) => student.id),
+    }));
 
     const allStudentIds = sections.flatMap((section) =>
       section.students.map((student) => student.id)
@@ -346,32 +339,36 @@ export class InstructorDashboardService {
         });
       });
 
-      const seenPairs = new Set<string>();
-      sectionAccess = ((sectionAccessData ?? []) as Array<{
+      const sectionStudentCount = new Map<string, number>();
+      rawToggleSections.forEach((section) => {
+        sectionStudentCount.set(section.id, section.studentCount);
+      });
+
+      const coverageByPair = new Map<string, Set<string>>();
+      for (const row of (sectionAccessData ?? []) as Array<{
         student_id: string;
         procedure_id: string;
-      }>).reduce<Array<{ sectionId: string; procedureId: string }>>(
-        (rows, row) => {
-          const sectionId = sectionIdByStudentId.get(row.student_id);
-          if (!sectionId) {
-            return rows;
-          }
+      }>) {
+        const sectionId = sectionIdByStudentId.get(row.student_id);
+        if (!sectionId) {
+          continue;
+        }
 
-          const pairKey = `${row.procedure_id}:${sectionId}`;
-          if (seenPairs.has(pairKey)) {
-            return rows;
-          }
+        const pairKey = `${row.procedure_id}:${sectionId}`;
+        const coveredStudents = coverageByPair.get(pairKey) ?? new Set<string>();
+        coveredStudents.add(row.student_id);
+        coverageByPair.set(pairKey, coveredStudents);
+      }
 
-          seenPairs.add(pairKey);
-          rows.push({
-            sectionId,
-            procedureId: row.procedure_id,
-          });
+      sectionAccess = [];
+      for (const [pairKey, coveredStudents] of coverageByPair.entries()) {
+        const [procedureId, sectionId] = pairKey.split(':');
+        const expectedStudents = sectionStudentCount.get(sectionId) ?? 0;
 
-          return rows;
-        },
-        []
-      );
+        if (expectedStudents > 0 && coveredStudents.size === expectedStudents) {
+          sectionAccess.push({ sectionId, procedureId });
+        }
+      }
     }
 
     return {
@@ -548,7 +545,7 @@ export class InstructorDashboardService {
 
     const { data: existingRows, error: existingRowsError } = await db
       .from('student_procedures')
-      .select('id')
+      .select('student_id')
       .eq('procedure_id', procedureId)
       .in('student_id', studentIds);
 
@@ -556,9 +553,14 @@ export class InstructorDashboardService {
       throw new BadRequestException(existingRowsError.message);
     }
 
-    const hasAccess = (existingRows ?? []).length > 0;
+    const studentsWithAccess = new Set(
+      (existingRows ?? []).map((row) => row.student_id)
+    );
+    const allStudentsHaveAccess = studentIds.every((studentId) =>
+      studentsWithAccess.has(studentId)
+    );
 
-    if (hasAccess) {
+    if (allStudentsHaveAccess) {
       const { error } = await db
         .from('student_procedures')
         .delete()
@@ -592,10 +594,14 @@ export class InstructorDashboardService {
     dto: { studentId: string; procedureId: string; notes?: string },
     accessToken: string
   ) {
-    const caller = await this.requireInstructor(accessToken);
+    await this.requireInstructor(accessToken);
     const db = this.supabase.getServiceClient();
 
-    await this.assertInstructorOwnsStudent(dto.studentId, caller.user.id);
+    await Promise.all([
+      this.assertStudentExists(dto.studentId),
+      this.assertProcedureExists(dto.procedureId),
+      this.assertStudentProcedureAssigned(dto.studentId, dto.procedureId),
+    ]);
 
     const { error } = await db
       .from('student_procedures')
@@ -622,7 +628,11 @@ export class InstructorDashboardService {
     const caller = await this.requireInstructor(accessToken);
     const db = this.supabase.getServiceClient();
 
-    await this.assertInstructorOwnsStudent(dto.studentId, caller.user.id);
+    await Promise.all([
+      this.assertStudentExists(dto.studentId),
+      this.assertProcedureExists(dto.procedureId),
+      this.assertStudentProcedureAssigned(dto.studentId, dto.procedureId),
+    ]);
 
     const procedureName = await this.getProcedureName(dto.procedureId);
     const { grade: score } = calculateProcedureGrade(
@@ -632,18 +642,19 @@ export class InstructorDashboardService {
     const competencyStatus =
       score === null ? null : score >= 75 ? 'Competent' : 'Not Yet Competent';
 
-    const { data: existingEvaluation, error: existingEvaluationError } = await db
+    const { data: existingEvaluations, error: existingEvaluationsError } = await db
       .from('evaluations')
       .select('id')
       .eq('student_id', dto.studentId)
       .eq('procedure_id', dto.procedureId)
-      .eq('instructor_id', caller.user.id)
-      .maybeSingle();
+      .order('evaluation_date', { ascending: false })
+      .order('created_at', { ascending: false });
 
-    if (existingEvaluationError) {
-      throw new BadRequestException(existingEvaluationError.message);
+    if (existingEvaluationsError) {
+      throw new BadRequestException(existingEvaluationsError.message);
     }
 
+    const nowIso = new Date().toISOString();
     const evaluationPayload = {
       student_id: dto.studentId,
       procedure_id: dto.procedureId,
@@ -652,23 +663,39 @@ export class InstructorDashboardService {
       max_score: 100,
       competency_status: competencyStatus,
       feedback: dto.feedback?.trim() || '',
+      evaluation_date: nowIso,
     };
 
-    const { error: evaluationError } = existingEvaluation
+    const latestEvaluation = (existingEvaluations ?? [])[0];
+    const { error: evaluationError } = latestEvaluation
       ? await db
           .from('evaluations')
           .update({
+            instructor_id: evaluationPayload.instructor_id,
             overall_score: evaluationPayload.overall_score,
             max_score: evaluationPayload.max_score,
             competency_status: evaluationPayload.competency_status,
             feedback: evaluationPayload.feedback,
-            evaluation_date: new Date().toISOString(),
+            evaluation_date: evaluationPayload.evaluation_date,
           })
-          .eq('id', existingEvaluation.id)
+          .eq('id', latestEvaluation.id)
       : await db.from('evaluations').insert(evaluationPayload);
 
     if (evaluationError) {
       throw new BadRequestException(evaluationError.message);
+    }
+
+    if ((existingEvaluations?.length ?? 0) > 1) {
+      const staleEvaluationIds = existingEvaluations!.slice(1).map((row) => row.id);
+
+      const { error: deleteDuplicateError } = await db
+        .from('evaluations')
+        .delete()
+        .in('id', staleEvaluationIds);
+
+      if (deleteDuplicateError) {
+        throw new BadRequestException(deleteDuplicateError.message);
+      }
     }
 
     const { error: studentProcedureError } = await db
@@ -734,24 +761,60 @@ export class InstructorDashboardService {
     return data.name;
   }
 
-  private async assertInstructorOwnsStudent(
-    studentId: string,
-    instructorId: string
-  ) {
+  private async assertStudentExists(studentId: string) {
     const db = this.supabase.getServiceClient();
     const { data, error } = await db
       .from('students')
-      .select('id, section_id, sections!inner(instructor_id)')
+      .select('id')
       .eq('id', studentId)
-      .eq('sections.instructor_id', instructorId)
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw new BadRequestException(error.message);
     }
 
     if (!data) {
-      throw new UnauthorizedException('Student access denied');
+      throw new NotFoundException('Student not found');
+    }
+  }
+
+  private async assertProcedureExists(procedureId: string) {
+    const db = this.supabase.getServiceClient();
+    const { data, error } = await db
+      .from('procedures')
+      .select('id')
+      .eq('id', procedureId)
+      .maybeSingle();
+
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    if (!data) {
+      throw new NotFoundException('Procedure not found');
+    }
+  }
+
+  private async assertStudentProcedureAssigned(
+    studentId: string,
+    procedureId: string
+  ) {
+    const db = this.supabase.getServiceClient();
+    const { data, error } = await db
+      .from('student_procedures')
+      .select('id')
+      .eq('student_id', studentId)
+      .eq('procedure_id', procedureId)
+      .maybeSingle();
+
+    if (error) {
+      throw new BadRequestException(error.message);
+    }
+
+    if (!data) {
+      throw new BadRequestException(
+        'Procedure is locked for this student. Unlock it before saving notes or evaluation.'
+      );
     }
   }
 

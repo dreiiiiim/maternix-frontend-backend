@@ -41,6 +41,7 @@
 --   Intramuscular Inj.    : 50000000-0000-0000-0000-000000000004
 --   Intradermal Inj.      : 50000000-0000-0000-0000-000000000005
 --   NICU                  : 50000000-0000-0000-0000-000000000006
+--   EINC - Taking Rectal Temperature : 50000000-0000-0000-0000-000000000010
 --   EINC - Anthropometric Measurements : 50000000-0000-0000-0000-000000000007
 --   EINC - Crede's Prophylaxis         : 50000000-0000-0000-0000-000000000008
 --   EINC - Infant Bath                 : 50000000-0000-0000-0000-000000000009
@@ -88,6 +89,12 @@ VALUES
    'Specialized Care',
    'Neonatal Intensive Care Unit procedures for the care of premature or critically ill newborns.',
    '30000000-0000-0000-0000-000000000001'),  -- Dr. Sarah Mitchell
+
+  ('50000000-0000-0000-0000-000000000010',
+   'EINC - Taking Rectal Temperature',
+   'Newborn Care',
+   'Rectal temperature measurement step within the Early and Immediate Newborn Care workflow.',
+   '30000000-0000-0000-0000-000000000001'),
 
   ('50000000-0000-0000-0000-000000000007',
    'EINC - Anthropometric Measurements',
@@ -303,9 +310,10 @@ ON CONFLICT (id) DO NOTHING;
 -- ================================================================
 -- DONE — Summary of what was seeded
 -- ================================================================
--- Procedures (9):
+-- Procedures (10):
 --   Leopold's Maneuver, EINC, Labor and Delivery,
 --   Intramuscular Injection, Intradermal Injection, NICU,
+--   EINC - Taking Rectal Temperature,
 --   EINC - Anthropometric Measurements,
 --   EINC - Crede's Prophylaxis,
 --   EINC - Infant Bath

@@ -22,16 +22,7 @@ CREATE POLICY "profiles_update_own"
 DROP POLICY IF EXISTS "sp_insert_instructor" ON public.student_procedures;
 CREATE POLICY "sp_insert_instructor"
   ON public.student_procedures FOR INSERT
-  WITH CHECK (
-    public.is_approved_instructor()
-    AND EXISTS (
-      SELECT 1
-      FROM public.students st
-      JOIN public.sections sec ON sec.id = st.section_id
-      WHERE st.id = student_procedures.student_id
-        AND sec.instructor_id = auth.uid()
-    )
-  );
+  WITH CHECK (public.is_approved_instructor());
 
 -- ----------------------------------------------------------------
 -- student_procedures: instructor can UPDATE
@@ -40,16 +31,7 @@ CREATE POLICY "sp_insert_instructor"
 DROP POLICY IF EXISTS "sp_update_instructor" ON public.student_procedures;
 CREATE POLICY "sp_update_instructor"
   ON public.student_procedures FOR UPDATE
-  USING (
-    public.is_approved_instructor()
-    AND EXISTS (
-      SELECT 1
-      FROM public.students st
-      JOIN public.sections sec ON sec.id = st.section_id
-      WHERE st.id = student_procedures.student_id
-        AND sec.instructor_id = auth.uid()
-    )
-  );
+  USING (public.is_approved_instructor());
 
 -- ----------------------------------------------------------------
 -- student_procedures: instructor can DELETE
@@ -58,16 +40,7 @@ CREATE POLICY "sp_update_instructor"
 DROP POLICY IF EXISTS "sp_delete_instructor" ON public.student_procedures;
 CREATE POLICY "sp_delete_instructor"
   ON public.student_procedures FOR DELETE
-  USING (
-    public.is_approved_instructor()
-    AND EXISTS (
-      SELECT 1
-      FROM public.students st
-      JOIN public.sections sec ON sec.id = st.section_id
-      WHERE st.id = student_procedures.student_id
-        AND sec.instructor_id = auth.uid()
-    )
-  );
+  USING (public.is_approved_instructor());
 
 -- ----------------------------------------------------------------
 -- sections: instructors can SELECT their own sections
