@@ -570,7 +570,7 @@ export function AdminDashboard() {
       <header className="bg-white border-b border-border sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/admin/dashboard" className="flex items-center gap-3">
-            <Image src="/images/LOGO-removebg-preview.png" alt="Maternix Track" width={144} height={58} className="h-14 w-auto" />
+            <Image src="/images/LOGO-removebg-preview.png" alt="Maternix Track" width={64} height={64} className="h-16 w-16" />
           </Link>
 
           <div className="flex items-center gap-4">

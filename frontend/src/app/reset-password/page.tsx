@@ -54,9 +54,9 @@ export default function ResetPasswordPage() {
           <Image
             src="/images/LOGO-removebg-preview.png"
             alt="Maternix Track"
-            width={160}
-            height={64}
-            className="mx-auto"
+            width={176}
+            height={176}
+            className="mx-auto h-44 w-44"
           />
         </div>
 
