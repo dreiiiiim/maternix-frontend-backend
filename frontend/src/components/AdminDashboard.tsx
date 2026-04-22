@@ -8,6 +8,7 @@ import { Users, BookOpen, UserCheck, LogOut, Plus, Edit2, Trash2, Check, X, Arro
 import Image from 'next/image';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 import { UserAvatar } from './UserAvatar';
 
 const STUDENT_ID_REGEX = /^NSG-\d{4}-\d{5}$/;
@@ -70,7 +71,7 @@ const asArray = <T,>(v: T | T[] | null | undefined): T[] =>
 export function AdminDashboard() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+  const apiUrl = getApiBaseUrl();
 
   const [activeTab, setActiveTab] = useState<'sections' | 'instructors' | 'approvals' | 'unassigned'>('sections');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -486,7 +487,7 @@ export function AdminDashboard() {
   const handleApprove = async (userId: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/approve`, {
+      const res = await fetch(`${apiUrl}/auth/approve`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -510,7 +511,7 @@ export function AdminDashboard() {
   const handleReject = async (userId: string) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/approve`, {
+      const res = await fetch(`${apiUrl}/auth/approve`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -535,7 +536,7 @@ export function AdminDashboard() {
     if (!confirm('Are you sure you want to permanently delete this user account? This action cannot be undone.')) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/remove`, {
+      const res = await fetch(`${apiUrl}/auth/remove`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

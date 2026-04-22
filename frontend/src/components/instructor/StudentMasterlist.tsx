@@ -13,6 +13,7 @@ import {
   Clock,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { getApiBaseUrl } from '@/lib/api-base-url'
 
 type StudentRecord = {
   id: string
@@ -34,7 +35,7 @@ type SectionRecord = {
 
 export function StudentMasterlist() {
   const supabase = useMemo(() => createClient(), [])
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+  const apiUrl = getApiBaseUrl()
 
   const [expandedSections, setExpandedSections] = useState<string[]>([])
   const [loading, setLoading] = useState(true)

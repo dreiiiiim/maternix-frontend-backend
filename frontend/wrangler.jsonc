@@ -2,7 +2,7 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "maternix-frontend",
   "main": ".open-next/worker.js",
-  "compatibility_date": "2026-04-23",
+  "compatibility_date": "2026-04-22",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": ".open-next/assets",

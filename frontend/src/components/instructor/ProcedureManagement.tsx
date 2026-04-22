@@ -5,6 +5,7 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Edit2, Lock, Send, Unlock } from 'lucide-react'
 import { StudentEvaluationForm } from './StudentEvaluationForm'
 import { createClient } from '@/lib/supabase/client'
+import { getApiBaseUrl } from '@/lib/api-base-url'
 
 type Procedure = {
   id: string
@@ -61,7 +62,7 @@ type EvaluationPayload = {
 
 export function ProcedureManagement() {
   const supabase = useMemo(() => createClient(), [])
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+  const apiUrl = getApiBaseUrl()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

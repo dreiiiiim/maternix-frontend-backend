@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { ArrowLeft, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { getApiBaseUrl } from '@/lib/api-base-url'
 
 type SignupRole = 'student' | 'instructor'
 
@@ -15,6 +16,7 @@ type SectionOption = {
 
 export function SignupPage() {
   const router = useRouter()
+  const apiUrl = getApiBaseUrl()
 
   const [userType, setUserType] = useState<SignupRole>('student')
   const [isLoading, setIsLoading] = useState(false)
@@ -41,7 +43,6 @@ export function SignupPage() {
     async function fetchSections() {
       setSectionsLoading(true)
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
         const res = await fetch(`${apiUrl}/auth/sections`)
         if (!res.ok) throw new Error(`Status ${res.status}`)
         const data: SectionOption[] = await res.json()
@@ -100,8 +101,6 @@ export function SignupPage() {
     setIsLoading(true)
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
-
       const body: Record<string, string> = {
         firstName: formData.firstName,
         lastName: formData.lastName,

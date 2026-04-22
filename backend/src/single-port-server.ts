@@ -5,6 +5,7 @@ import express from 'express';
 import path from 'path';
 import { createRequire } from 'module';
 import { AppModule } from './app.module';
+import { createCorsOptions } from './common/cors';
 
 async function bootstrap() {
   const port = Number(process.env.SINGLE_PORT ?? '3000');
@@ -42,10 +43,7 @@ async function bootstrap() {
     cors: false,
   });
 
-  app.enableCors({
-    origin: frontendUrl,
-    credentials: true,
-  });
+  app.enableCors(createCorsOptions(frontendUrl));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
   app.setGlobalPrefix(apiPrefix);
 

@@ -251,3 +251,57 @@ npm run build    # Build for production
 npm run start    # Start production server (run build first)
 npm run lint     # Run ESLint
 ```
+
+---
+
+## Public Deployment (Cloudflare + Railway + Custom Domain)
+
+### 1. Backend (Railway) must allow your frontend origin
+
+Set backend environment variables in Railway:
+
+```env
+FRONTEND_URL=https://your-frontend-domain.com
+CORS_ORIGINS=https://your-frontend-domain.com,https://your-workers-subdomain.workers.dev
+```
+
+`CORS_ORIGINS` supports comma-separated origins.
+
+### 2. Frontend build must target a public backend URL
+
+For production builds, set:
+
+```env
+BACKEND_URL=https://your-backend-domain.com
+NEXT_PUBLIC_API_URL=https://your-backend-domain.com
+NEXT_PUBLIC_APP_URL=https://your-frontend-domain.com
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
+
+Important:
+- Do not use `http://localhost:3001` for production.
+- The app now fails production build if backend URL is missing or localhost.
+
+### 3. Deploy frontend Worker
+
+From `frontend/`:
+
+```bash
+npm run build
+npm run deploy
+```
+
+### 4. Map custom domain in Cloudflare
+
+1. Open Workers & Pages → your worker (`maternix-frontend`)
+2. Add a Custom Domain (for example `app.yourdomain.com`)
+3. Wait for SSL to provision
+4. Update `NEXT_PUBLIC_APP_URL` to that final domain and redeploy
+
+### 5. Validate production flow
+
+1. Open your public domain
+2. Login and open Instructor Dashboard
+3. Confirm API calls go to your public backend URL (not localhost)
+4. Test `/auth/callback` and protected pages

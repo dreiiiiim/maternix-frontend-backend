@@ -21,6 +21,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnnouncementPopup } from './AnnouncementPopup';
 import { createClient } from '@/lib/supabase/client';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 import { UserAvatar } from './UserAvatar';
 
 type EvaluationData = {
@@ -89,6 +90,7 @@ const categoryColors: Record<string, string> = {
 export function StudentDashboard() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const apiUrl = getApiBaseUrl();
 
   const [selectedProcedure, setSelectedProcedure] = useState<Procedure | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -157,7 +159,6 @@ export function StudentDashboard() {
           return;
         }
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
         const response = await fetch(`${apiUrl}/student/dashboard`, {
           headers: {
             Authorization: `Bearer ${session.access_token}`,

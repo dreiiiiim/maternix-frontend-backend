@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Send, Plus, CheckCircle, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { getApiBaseUrl } from '@/lib/api-base-url'
 
 type AnnouncementItem = {
   id: string
@@ -14,7 +15,7 @@ type AnnouncementItem = {
 
 export function AnnouncementForm() {
   const supabase = useMemo(() => createClient(), [])
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+  const apiUrl = getApiBaseUrl()
   const networkErrorMessage = `Unable to reach the server at ${apiUrl}. Make sure the backend app is running.`
 
   const [loading, setLoading] = useState(true)

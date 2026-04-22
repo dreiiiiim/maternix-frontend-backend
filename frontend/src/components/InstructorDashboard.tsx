@@ -7,6 +7,7 @@ import { Bell, FileText, Users, LogOut } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 import { AnnouncementForm } from './instructor/AnnouncementForm';
 import { ProcedureManagement } from './instructor/ProcedureManagement';
 import { StudentMasterlist } from './instructor/StudentMasterlist';
@@ -23,6 +24,7 @@ type DashboardPayload = {
 export function InstructorDashboard() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const apiUrl = getApiBaseUrl();
   const [activeTab, setActiveTab] = useState<TabType>('announcements');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [instructorName, setInstructorName] = useState('Clinical Instructor');
@@ -38,7 +40,6 @@ export function InstructorDashboard() {
 
       if (!session?.access_token) return;
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
       const response = await fetch(`${apiUrl}/instructor/dashboard`, {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
