@@ -197,7 +197,7 @@ export function StudentDashboard() {
       <header className="bg-white border-b border-border sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/student/dashboard" className="flex items-center gap-3">
-            <Image src="/images/LOGO-removebg-preview.png" alt="Maternix Track" width={120} height={48} className="h-12 w-auto" />
+            <Image src="/images/LOGO-removebg-preview.png" alt="Maternix Track" width={144} height={58} className="h-14 w-auto" />
           </Link>
 
           <div className="flex items-center gap-4">

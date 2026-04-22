@@ -43,8 +43,8 @@ export default function ForgotPasswordPage() {
           <Image
             src="/images/LOGO-removebg-preview.png"
             alt="Maternix Track"
-            width={140}
-            height={56}
+            width={160}
+            height={64}
             className="mx-auto"
           />
         </div>

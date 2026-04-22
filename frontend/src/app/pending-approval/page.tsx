@@ -27,8 +27,8 @@ export default function PendingApprovalPage() {
           <Image
             src="/images/LOGO-removebg-preview.png"
             alt="Maternix Track"
-            width={160}
-            height={64}
+            width={176}
+            height={70}
             className="mx-auto"
           />
         </div>

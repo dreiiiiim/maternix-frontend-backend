@@ -244,9 +244,9 @@ export function StudentProfile() {
             <Image
               src="/images/LOGO-removebg-preview.png"
               alt="Maternix Track"
-              width={120}
-              height={48}
-              className="h-12 w-auto"
+              width={144}
+              height={58}
+              className="h-14 w-auto"
             />
           </Link>
 
