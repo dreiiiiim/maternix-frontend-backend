@@ -13,6 +13,7 @@ type InstructorDashboardResponse = {
     firstName: string;
     lastName: string;
     fullName: string;
+    avatarUrl: string | null;
   };
 };
 
@@ -121,7 +122,7 @@ export class InstructorDashboardService {
 
     const { data: profile, error } = await db
       .from('profiles')
-      .select('id, first_name, last_name, full_name')
+      .select('id, first_name, last_name, full_name, avatar_url')
       .eq('id', caller.user.id)
       .single();
 
@@ -141,6 +142,7 @@ export class InstructorDashboardService {
         fullName:
           profile.full_name ??
           `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim(),
+        avatarUrl: profile.avatar_url ?? null,
       },
     };
   }

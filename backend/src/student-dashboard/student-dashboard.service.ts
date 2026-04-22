@@ -12,6 +12,7 @@ type StudentDashboardResponse = {
     lastName: string;
     fullName: string;
     role: string;
+    avatarUrl: string | null;
   };
   stats: {
     totalAllowed: number;
@@ -84,7 +85,7 @@ export class StudentDashboardService {
       await Promise.all([
         db
           .from('profiles')
-          .select('id, first_name, last_name, full_name, role')
+          .select('id, first_name, last_name, full_name, role, avatar_url')
           .eq('id', userId)
           .single(),
         db
@@ -233,6 +234,7 @@ export class StudentDashboardService {
           profile.full_name ??
           `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim(),
         role: profile.role,
+        avatarUrl: profile.avatar_url ?? null,
       },
       stats,
       procedures: mappedProcedures,

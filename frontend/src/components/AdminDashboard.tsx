@@ -4,10 +4,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Users, BookOpen, UserCheck, Settings, LogOut, Plus, Edit2, Trash2, Check, X, ArrowLeft, ArrowRightLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { Users, BookOpen, UserCheck, LogOut, Plus, Edit2, Trash2, Check, X, ArrowLeft, ArrowRightLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import Image from 'next/image';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
+import { UserAvatar } from './UserAvatar';
 
 const STUDENT_ID_REGEX = /^NSG-\d{4}-\d{5}$/;
 const EMPLOYEE_ID_REGEX = /^EMP-\d{4}-\d{4}$/;
@@ -73,6 +74,8 @@ export function AdminDashboard() {
 
   const [activeTab, setActiveTab] = useState<'sections' | 'instructors' | 'approvals' | 'unassigned'>('sections');
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [adminName, setAdminName] = useState('Admin');
+  const [adminAvatarUrl, setAdminAvatarUrl] = useState<string | null>(null);
   const [showAddSection, setShowAddSection] = useState(false);
   const [editingSection, setEditingSection] = useState<Section | null>(null);
   const [selectedSection, setSelectedSection] = useState<Section | null>(null);
@@ -231,6 +234,34 @@ export function AdminDashboard() {
     setApprovalsLoading(false);
   }, [supabase]);
 
+  const fetchCurrentAdminProfile = useCallback(async () => {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('first_name, last_name, full_name, avatar_url')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (profileError || !profile) {
+      return;
+    }
+
+    const fullName =
+      profile.full_name ??
+      `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim();
+
+    setAdminName(fullName || 'Admin');
+    setAdminAvatarUrl(profile.avatar_url ?? null);
+  }, [supabase]);
+
   // Initial load
   useEffect(() => {
     async function loadAll() {
@@ -241,11 +272,19 @@ export function AdminDashboard() {
         fetchInstructors(),
         fetchInstructorOptions(),
         fetchPendingApprovals(),
+        fetchCurrentAdminProfile(),
       ]);
       setDataLoading(false);
     }
     loadAll();
-  }, [fetchSections, fetchStudents, fetchInstructors, fetchInstructorOptions, fetchPendingApprovals]);
+  }, [
+    fetchSections,
+    fetchStudents,
+    fetchInstructors,
+    fetchInstructorOptions,
+    fetchPendingApprovals,
+    fetchCurrentAdminProfile,
+  ]);
 
   // ── Section CRUD ───────────────────────────────────────────────────────
 
@@ -540,11 +579,14 @@ export function AdminDashboard() {
                 className="flex items-center gap-3 px-4 py-2 rounded-lg transition-all hover:shadow-md"
                 style={{ backgroundColor: 'var(--brand-green-dark)20' }}
               >
-                <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--brand-green-dark)' }}>
-                  <Settings className="w-4 h-4 text-white" />
-                </div>
+                <UserAvatar
+                  name={adminName}
+                  avatarUrl={adminAvatarUrl}
+                  sizeClassName="w-8 h-8"
+                  fallbackBackgroundColor="var(--brand-green-dark)"
+                />
                 <div className="text-sm">
-                  <div className="font-medium text-foreground">Admin</div>
+                  <div className="font-medium text-foreground">{adminName}</div>
                   <div className="text-muted-foreground text-xs">System Administrator</div>
                 </div>
               </button>
