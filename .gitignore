@@ -8,6 +8,8 @@ frontend/node_modules
 # Next.js
 frontend/.next
 frontend/out
+frontend/.open-next
+frontend/.wrangler
 
 # Build output
 frontend/build
