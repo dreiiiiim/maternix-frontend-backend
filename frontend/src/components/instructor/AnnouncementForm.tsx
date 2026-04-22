@@ -2,19 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Send, Plus, CheckCircle, Trash2, Eye, Edit2, X } from 'lucide-react'
+import { Send, Plus, CheckCircle, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 type AnnouncementItem = {
   id: string
   title: string
-  content: string
   category: string
   created_at: string
-  updated_at: string
-  createdBy: string
-  authorName: string
-  isMine: boolean
 }
 
 export function AnnouncementForm() {
@@ -24,37 +19,17 @@ export function AnnouncementForm() {
 
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [savingEdit, setSavingEdit] = useState(false)
   const [error, setError] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
+  const [showSuccess, setShowSuccess] = useState(false)
   const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([])
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState<AnnouncementItem | null>(null)
-  const [editingAnnouncement, setEditingAnnouncement] = useState<AnnouncementItem | null>(null)
 
   const [formData, setFormData] = useState({
     title: '',
     content: '',
     category: 'Academic',
   })
-  const [editData, setEditData] = useState({
-    title: '',
-    content: '',
-    category: 'Academic',
-  })
 
   const categories = ['Academic', 'Schedule', 'Assessment', 'Event', 'Policy']
-
-  const showSuccess = (message: string) => {
-    setSuccessMessage(message)
-    setTimeout(() => setSuccessMessage(''), 2500)
-  }
-
-  const formatDate = (value: string) =>
-    new Date(value).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
 
   const fetchAnnouncements = useCallback(async () => {
     setLoading(true)
@@ -136,7 +111,8 @@ export function AnnouncementForm() {
         return
       }
 
-      showSuccess('Announcement posted successfully.')
+      setShowSuccess(true)
+      setTimeout(() => setShowSuccess(false), 2500)
       setFormData({ title: '', content: '', category: 'Academic' })
       await fetchAnnouncements()
     } catch {
@@ -146,71 +122,7 @@ export function AnnouncementForm() {
     setSubmitting(false)
   }
 
-  const openEditModal = (announcement: AnnouncementItem) => {
-    if (!announcement.isMine) return
-    setEditingAnnouncement(announcement)
-    setEditData({
-      title: announcement.title,
-      content: announcement.content,
-      category: announcement.category,
-    })
-    setError('')
-  }
-
-  const handleSaveEdit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editingAnnouncement) return
-
-    setError('')
-    setSavingEdit(true)
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-
-    if (!session?.access_token) {
-      setError('You must be logged in to edit announcements.')
-      setSavingEdit(false)
-      return
-    }
-
-    try {
-      const response = await fetch(`${apiUrl}/announcements/${editingAnnouncement.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          title: editData.title,
-          content: editData.content,
-          category: editData.category,
-        }),
-      })
-
-      const payload = await response.json().catch(() => null)
-      if (!response.ok) {
-        setError(payload?.message ?? 'Failed to update announcement.')
-        setSavingEdit(false)
-        return
-      }
-
-      setEditingAnnouncement(null)
-      showSuccess('Announcement updated successfully.')
-      await fetchAnnouncements()
-    } catch {
-      setError(networkErrorMessage)
-    }
-
-    setSavingEdit(false)
-  }
-
-  const handleDelete = async (announcement: AnnouncementItem) => {
-    if (!announcement.isMine) {
-      setError('You can only delete announcements you created.')
-      return
-    }
-
+  const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this announcement?')) return
     setError('')
 
@@ -224,7 +136,7 @@ export function AnnouncementForm() {
     }
 
     try {
-      const response = await fetch(`${apiUrl}/announcements/${announcement.id}`, {
+      const response = await fetch(`${apiUrl}/announcements/${id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -238,14 +150,14 @@ export function AnnouncementForm() {
         return
       }
 
-      setAnnouncements((prev) => prev.filter((item) => item.id !== announcement.id))
+      setAnnouncements((prev) => prev.filter((item) => item.id !== id))
     } catch {
       setError(networkErrorMessage)
     }
   }
 
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-3xl">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -260,11 +172,11 @@ export function AnnouncementForm() {
           </div>
           <div>
             <h2 className="text-3xl font-bold text-foreground">Post Announcement</h2>
-            <p className="text-muted-foreground">Shared CI feed across all instructors</p>
+            <p className="text-muted-foreground">Share important updates with your students</p>
           </div>
         </div>
 
-        {successMessage && (
+        {showSuccess && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -275,7 +187,7 @@ export function AnnouncementForm() {
             }}
           >
             <CheckCircle className="w-5 h-5" style={{ color: 'var(--brand-green-dark)' }} />
-            <span className="font-medium text-foreground">{successMessage}</span>
+            <span className="font-medium text-foreground">Announcement posted successfully.</span>
           </motion.div>
         )}
 
@@ -364,61 +276,31 @@ export function AnnouncementForm() {
               {announcements.map((announcement) => (
                 <div
                   key={announcement.id}
-                  className="bg-white border border-border rounded-lg p-4 hover:shadow-md transition-all"
+                  className="bg-white border border-border rounded-lg p-4 flex items-center justify-between hover:shadow-md transition-all"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <h4 className="font-semibold text-foreground">{announcement.title}</h4>
-                        <span
-                          className="px-3 py-1 rounded-full text-xs text-white"
-                          style={{ backgroundColor: 'var(--brand-green-medium)' }}
-                        >
-                          {announcement.category}
-                        </span>
-                        {announcement.isMine && (
-                          <span className="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-600">
-                            You
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        By {announcement.authorName} - Updated {formatDate(announcement.updated_at)}
-                      </p>
-                      <p className="text-sm text-foreground/80">
-                        {announcement.content.length > 120
-                          ? `${announcement.content.slice(0, 120)}...`
-                          : announcement.content}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setSelectedAnnouncement(announcement)}
-                        className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-gray-50 transition-colors inline-flex items-center gap-2"
-                        suppressHydrationWarning
-                      >
-                        <Eye className="w-4 h-4" />
-                        Details
-                      </button>
-                      {announcement.isMine && (
-                        <button
-                          onClick={() => openEditModal(announcement)}
-                          className="px-3 py-2 text-sm border border-border rounded-lg hover:bg-gray-50 transition-colors inline-flex items-center gap-2"
-                          suppressHydrationWarning
-                        >
-                          <Edit2 className="w-4 h-4" />
-                          Edit
-                        </button>
-                      )}
-                      {announcement.isMine && (
-                        <button
-                          onClick={() => handleDelete(announcement)}
-                          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                        >
-                          <Trash2 className="w-5 h-5" style={{ color: 'var(--brand-pink-dark)' }} />
-                        </button>
-                      )}
-                    </div>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-foreground">{announcement.title}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(announcement.created_at).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="px-3 py-1 rounded-full text-xs text-white"
+                      style={{ backgroundColor: 'var(--brand-green-medium)' }}
+                    >
+                      {announcement.category}
+                    </span>
+                    <button
+                      onClick={() => handleDelete(announcement.id)}
+                      className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                    >
+                      <Trash2 className="w-5 h-5" style={{ color: 'var(--brand-pink-dark)' }} />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -426,118 +308,6 @@ export function AnnouncementForm() {
           )}
         </div>
       </motion.div>
-
-      {selectedAnnouncement && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-border w-full max-w-2xl max-h-[85vh] overflow-y-auto">
-            <div className="p-6 border-b border-border flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-2xl font-bold text-foreground">{selectedAnnouncement.title}</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  By {selectedAnnouncement.authorName}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedAnnouncement(null)}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className="px-3 py-1 rounded-full text-xs text-white"
-                  style={{ backgroundColor: 'var(--brand-green-medium)' }}
-                >
-                  {selectedAnnouncement.category}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  Created {formatDate(selectedAnnouncement.created_at)}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  Updated {formatDate(selectedAnnouncement.updated_at)}
-                </span>
-              </div>
-              <div className="rounded-xl border border-border p-4 bg-gray-50">
-                <p className="text-foreground whitespace-pre-wrap">{selectedAnnouncement.content}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editingAnnouncement && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <form
-            onSubmit={handleSaveEdit}
-            className="bg-white rounded-2xl border border-border w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-          >
-            <div className="p-6 border-b border-border flex items-center justify-between">
-              <h3 className="text-2xl font-bold text-foreground">Edit Announcement</h3>
-              <button
-                type="button"
-                onClick={() => setEditingAnnouncement(null)}
-                className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-5">
-              <div>
-                <label className="block text-sm font-medium mb-2 text-foreground">Title</label>
-                <input
-                  type="text"
-                  value={editData.title}
-                  onChange={(e) => setEditData((prev) => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-lg border border-border bg-input-background focus:outline-none focus:ring-2"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-foreground">Category</label>
-                <select
-                  value={editData.category}
-                  onChange={(e) => setEditData((prev) => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-lg border border-border bg-input-background focus:outline-none focus:ring-2"
-                >
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-foreground">Content</label>
-                <textarea
-                  value={editData.content}
-                  onChange={(e) => setEditData((prev) => ({ ...prev, content: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-lg border border-border bg-input-background focus:outline-none focus:ring-2 min-h-[200px]"
-                  required
-                />
-              </div>
-              <div className="flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEditingAnnouncement(null)}
-                  className="px-4 py-2 rounded-lg border border-border hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingEdit}
-                  className="px-4 py-2 text-white rounded-lg disabled:opacity-70"
-                  style={{ backgroundColor: 'var(--brand-green-dark)' }}
-                >
-                  {savingEdit ? 'Saving...' : 'Save Changes'}
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   )
 }

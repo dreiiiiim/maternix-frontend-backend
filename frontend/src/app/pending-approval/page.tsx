@@ -5,14 +5,13 @@ import { motion } from 'framer-motion';
 import { Clock, Mail, LogOut } from 'lucide-react';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
-import { signOutAndClearRememberedSession } from '@/lib/supabase/remember-me';
 
 export default function PendingApprovalPage() {
   const router = useRouter();
   const supabase = createClient();
 
   const handleLogout = async () => {
-    await signOutAndClearRememberedSession(supabase);
+    await supabase.auth.signOut();
     router.push('/');
   };
 

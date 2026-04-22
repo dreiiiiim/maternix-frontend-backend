@@ -41,6 +41,9 @@
 --   Intramuscular Inj.    : 50000000-0000-0000-0000-000000000004
 --   Intradermal Inj.      : 50000000-0000-0000-0000-000000000005
 --   NICU                  : 50000000-0000-0000-0000-000000000006
+--   EINC - Anthropometric Measurements : 50000000-0000-0000-0000-000000000007
+--   EINC - Crede's Prophylaxis         : 50000000-0000-0000-0000-000000000008
+--   EINC - Infant Bath                 : 50000000-0000-0000-0000-000000000009
 -- ================================================================
 
 
@@ -84,7 +87,25 @@ VALUES
    'NICU',
    'Specialized Care',
    'Neonatal Intensive Care Unit procedures for the care of premature or critically ill newborns.',
-   '30000000-0000-0000-0000-000000000001')   -- Dr. Sarah Mitchell
+   '30000000-0000-0000-0000-000000000001'),  -- Dr. Sarah Mitchell
+
+  ('50000000-0000-0000-0000-000000000007',
+   'EINC - Anthropometric Measurements',
+   'Newborn Care',
+   'Anthropometric measurements step within the Early and Immediate Newborn Care workflow.',
+   '30000000-0000-0000-0000-000000000001'),
+
+  ('50000000-0000-0000-0000-000000000008',
+   'EINC - Crede''s Prophylaxis',
+   'Newborn Care',
+   'Crede''s prophylaxis step within the Early and Immediate Newborn Care workflow.',
+   '30000000-0000-0000-0000-000000000001'),
+
+  ('50000000-0000-0000-0000-000000000009',
+   'EINC - Infant Bath',
+   'Newborn Care',
+   'Infant bath step within the Early and Immediate Newborn Care workflow.',
+   '30000000-0000-0000-0000-000000000001')
 
 ON CONFLICT (id) DO NOTHING;
 
@@ -282,9 +303,12 @@ ON CONFLICT (id) DO NOTHING;
 -- ================================================================
 -- DONE — Summary of what was seeded
 -- ================================================================
--- Procedures (6):
+-- Procedures (9):
 --   Leopold's Maneuver, EINC, Labor and Delivery,
---   Intramuscular Injection, Intradermal Injection, NICU
+--   Intramuscular Injection, Intradermal Injection, NICU,
+--   EINC - Anthropometric Measurements,
+--   EINC - Crede's Prophylaxis,
+--   EINC - Infant Bath
 --
 -- Student Procedures:
 --   BSN 2A — Leopold's + EINC + Labor assigned to all 7 students

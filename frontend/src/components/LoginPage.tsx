@@ -3,44 +3,24 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
-import {
-  clearRememberedAuthSession,
-  getBrowserRememberMePreference,
-  getRememberedEmail,
-  persistRememberedSession,
-  setBrowserRememberMePreference,
-  setRememberedEmail,
-  signOutAndClearRememberedSession,
-} from '@/lib/supabase/remember-me';
 
 export function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    const remembered = getBrowserRememberMePreference();
-    setRememberMe(remembered);
-
-    if (remembered) {
-      setEmail(getRememberedEmail());
-    }
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    setBrowserRememberMePreference(rememberMe);
     const supabase = createClient();
 
     const { data, error: authError } = await supabase.auth.signInWithPassword({
@@ -54,17 +34,9 @@ export function LoginPage() {
       return;
     }
 
-    if (rememberMe) {
-      setRememberedEmail(email);
-      persistRememberedSession(data.session ?? null);
-    } else {
-      setRememberedEmail('');
-      clearRememberedAuthSession();
-    }
-
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
-      .select('role, status, email_verified')
+      .select('role, status')
       .eq('id', data.user.id)
       .single();
 
@@ -74,7 +46,7 @@ export function LoginPage() {
           ? 'No profile found for this account. Please contact support.'
           : `Profile error: ${profileError?.message ?? 'Unknown error'}`
       );
-      await signOutAndClearRememberedSession(supabase);
+      await supabase.auth.signOut();
       setIsLoading(false);
       return;
     }
@@ -86,17 +58,12 @@ export function LoginPage() {
 
     if (profile.status === 'rejected') {
       setError('Your account registration was not approved. Please contact your institution.');
-      await signOutAndClearRememberedSession(supabase);
+      await supabase.auth.signOut();
       setIsLoading(false);
       return;
     }
 
-    if (profile.status === 'approved' && !profile.email_verified) {
-      router.push('/pending-verification');
-      return;
-    }
-
-    // approved + verified — route to role dashboard
+    // approved — route to role dashboard
     sessionStorage.removeItem('announcementPopupShown');
     router.push(`/${profile.role}/dashboard`);
   };
@@ -174,8 +141,6 @@ export function LoginPage() {
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
                   className="w-4 h-4 rounded border-border"
                   style={{ accentColor: 'var(--brand-pink-dark)' }}
                 />

@@ -36,7 +36,7 @@ const leopoldsManeuverCriteria: PerformanceCriterion[] = [
   { id: 10, text: 'Practices proper draping', points: 1 },
   { id: 11, text: 'Warms hands by rubbing both palmar surface of your hands', points: 1 },
   { id: 12, text: "Rest your hand on the woman's abdomen lightly while reinforce explanation given", points: 1 },
-  { id: 13, text: 'Use flat palmar surface of fingers and not fingertips during palpation, and keep fingers of hands together', points: 0 },
+  { id: 13, text: 'Use flat palmar surface of fingers and not fingertips during palpation, and keep fingers of hands together', points: 1 },
   { id: 14, text: 'Applies smooth and gentle deep pressure as firm as necessary', points: 1 },
   {
     id: 15,
@@ -60,9 +60,9 @@ const leopoldsManeuverCriteria: PerformanceCriterion[] = [
     ],
   },
   { id: 17, text: "Performs 3rd Leopold's Maneuver (Pawlik's Grip) Continue facing the woman grasp the portion of the lower abdomen immediately above the symphysis pubis between the thumb and middle finger of one of your hands", points: 1 },
-  { id: 18, text: "Performs the 4th Leopold's Maneuver (Pelvic Grip) Face the woman's feet and place the palmar surface of your hands on each side of the woman's abdomen. Use both hands and palpate fetal head using gentle downward press with your fingertips about 2 inches above the inguinal ligament", points: 0 },
+  { id: 18, text: "Performs the 4th Leopold's Maneuver (Pelvic Grip) Face the woman's feet and place the palmar surface of your hands on each side of the woman's abdomen. Use both hands and palpate fetal head using gentle downward press with your fingertips about 2 inches above the inguinal ligament", points: 1 },
   { id: 19, text: 'Warms head of the stethoscope before auscultation', points: 1 },
-  { id: 20, text: 'Locate fetal heart rate', points: 0 },
+  { id: 20, text: 'Locate fetal heart rate', points: 1 },
   { id: 21, text: 'Place the zero line of the tape measure on the fundus down to superior border of the symphysis pubis', points: 1 },
   { id: 22, text: 'Assess the patient properly after examination', points: 1 },
   { id: 23, text: 'Takes proper care of articles used after the procedure', points: 1 },
@@ -153,45 +153,169 @@ const nicuCriteria: PerformanceCriterion[] = [
   { id: 9, text: 'Removes wet cloth and dispose properly. Replace with dry clean cloth', points: 1 },
   { id: 10, text: "Does a quick checking of baby's breathing while drying, rubs gently the back to stimulate baby to cry", points: 1 },
   { id: 11, text: 'Performs APGAR Scoring (1 minute and after 5 minutes)', points: 1 },
+  { id: 12, text: 'Shows to the mother the gender of the baby.', points: 1 },
+  { id: 13, text: "Moves the baby close to the mother's chest. Place in frog position.", points: 1 },
+  { id: 14, text: "Places the baby in skin-to-skin contact on the mother's chest in between the breasts with the head turned to one side.", points: 1 },
+  { id: 15, text: "Keeps the baby's body covered with dry cloth/towel.", points: 1 },
+  { id: 16, text: 'Covers the head with bonnet.', points: 1 },
+  { id: 17, text: 'Takes vital signs (RR, CR, temperature per rectum to check patency).', points: 1 },
+  { id: 18, text: 'Encourages mother to move baby toward the breast.', points: 1 },
+  {
+    id: 19,
+    text: "Gets the identification tag of the newborn and compares it to the mother's tag (nametag, name of mother, date and time of delivery, gender, and name of the attending physician).",
+    points: 1,
+  },
+  { id: 20, text: 'Places identification band on ankle.', points: 1 },
+  {
+    id: 21,
+    text: 'Observes the newborn when newborn shows feeding cues (e.g. opening of mouth, tonguing, licking, rooting).',
+    points: 1,
+  },
+  {
+    id: 22,
+    text: "Lifts the baby from the mother's chest (after 90 minutes of skin-to-skin) and does non-immediate interventions.",
+    points: 1,
+  },
+  {
+    id: 23,
+    text: 'Covers weighing scale with clean light cloth, places the naked body of the baby, and weighs the baby properly.',
+    points: 1,
+  },
+  { id: 24, text: 'Takes the anthropometric measurements correctly.', points: 1 },
+  { id: 25, text: "Cleans the eyes. Apply CREDE'S prophylaxis on both eyes.", points: 1 },
+  {
+    id: 26,
+    text: 'Injects 1 ml of Vitamin K in right vastus lateralis.',
+    points: 5,
+    subCriteria: [
+      { id: '26a', text: 'a. Positions hands properly when preparing the medication.' },
+      { id: '26b', text: 'b. Aspirates the exact amount.' },
+      { id: '26c', text: 'c. Observes aseptic technique.' },
+      { id: '26d', text: 'd. Positions hands properly when injecting the drug.' },
+      { id: '26e', text: 'e. Disposes used syringe in the sharps container.' },
+    ],
+  },
+  {
+    id: 27,
+    text: 'Injects 0.5 ml Hepatitis B in left vastus lateralis.',
+    points: 5,
+    subCriteria: [
+      { id: '27a', text: 'a. Positions hands properly when preparing the medication.' },
+      { id: '27b', text: 'b. Aspirates the exact amount of the drug.' },
+      { id: '27c', text: 'c. Observes aseptic technique.' },
+      { id: '27d', text: 'd. Positions hands properly when injecting the drug.' },
+      { id: '27e', text: 'e. Injects the drug slowly.' },
+    ],
+  },
+  { id: 28, text: 'Assists the NICU staff in doing Ballard Scoring.', points: 1 },
+  {
+    id: 29,
+    text: 'Performs thorough physical examination.',
+    points: 9,
+    subCriteria: [
+      { id: '29a', text: 'a. head' },
+      { id: '29b', text: 'b. eyes' },
+      { id: '29d', text: 'd. nose' },
+      { id: '29e', text: 'e. chest' },
+      { id: '29f', text: 'f. back' },
+      { id: '29g', text: 'g. genitalia' },
+      { id: '29h', text: 'h. upper extremities - hands' },
+      { id: '29i', text: 'i. lower extremities - feet' },
+      { id: '29j', text: 'j. reflexes' },
+    ],
+  },
+  { id: 30, text: 'Dress up the baby properly.', points: 1 },
+  {
+    id: 31,
+    text: 'Puts the diaper properly. Expose cord stump by folding the diaper below the cord.',
+    points: 1,
+  },
+  { id: 32, text: 'Mummify the baby properly.', points: 1 },
+  { id: 33, text: 'Brings the baby to mother.', points: 1 },
+  {
+    id: 34,
+    text: 'Checks the identification tag of the baby and compares it to mother.',
+    points: 1,
+  },
+  { id: 35, text: "Ask the mother to sign in the baby's chart.", points: 1 },
+  { id: 36, text: "Cleans the mother's nipple.", points: 1 },
+  { id: 37, text: 'Places the baby on chest. Assist the mother in breastfeeding.', points: 1 },
+  {
+    id: 38,
+    text: 'Renders health teaching. Ask what the patient knows regarding infant care.',
+    points: 1,
+  },
+  {
+    id: 39,
+    text: 'Provides information regarding:',
+    points: 7,
+    subCriteria: [
+      { id: '39a', text: 'BCG' },
+      { id: '39b', text: 'Newborn screening' },
+      { id: '39c', text: 'Immunization' },
+      { id: '39d', text: 'Feeding and burping' },
+      { id: '39e', text: 'Bathing' },
+      { id: '39f', text: 'Exposure to Sunlight' },
+      { id: '39g', text: 'Check-up or appointment date' },
+    ],
+  },
+  {
+    id: 40,
+    text: 'Provides instruction to the mother on daily cord care, prevention of cord infection and information on when to expect cord to fall off.',
+    points: 1,
+  },
+  {
+    id: 41,
+    text: 'Examines the newborn. Check for birth injuries, malformations or defects. Look for malformations:',
+    points: 20,
+    subCriteria: [
+      { id: '41a', text: '- Cleft palate or lip' },
+      { id: '41b', text: '- Club foot' },
+      { id: '41c', text: '- Odd looking, unusual appearance' },
+      { id: '41d', text: '- Open tissue on head, abdomen or back' },
+    ],
+  },
+  { id: 42, text: 'Completes all the records.', points: 1 },
+  { id: 43, text: 'Gives full warm bath after 6 hours.', points: 1 },
 ];
 
 const laborAndDeliveryCriteria: PerformanceCriterion[] = [
-  { id: 1, text: 'State the Definition', points: 1 },
-  { id: 2, text: 'State the Purpose', points: 1 },
-  { id: 3, text: 'Ensure that the mother is in her position of choice while in labor.', points: 1 },
-  { id: 4, text: 'Ask mother if she wishes to eat/drink or void.', points: 1 },
-  { id: 5, text: 'Communicate with the mother – inform her of the progress of labor, give reassurance and encouragement.', points: 1 },
-  { id: 6, text: 'Perform the Internal Examination if needed.', points: 1 },
-  { id: 7, text: "Transports clients safely to DR while providing privacy.", points: 1 },
-  { id: 8, text: 'Check temperature in the DR area to be 25-28o C, eliminate air drafts.', points: 1 },
-  { id: 9, text: 'Places mother in lithotomy position. And, ask a woman if she is comfortable in the semi-upright position.', points: 1 },
-  { id: 10, text: 'Perform Handwashing', points: 1 },
-  { id: 11, text: 'Arrange materials/supplies in a clear sequence: DR Pack (2 Kelly forceps, 1 allis forceps, 1 needle holder, 2 pads/Santex, 1 straight mayo scissor, 1 bandage scissor, 1 kidney basin, 1 eyesheet, 1 pair of lower and 2 receiving blanket) 2 Gloves, suturing needle, 1 10 cc syringe, 1 foley catheter, 1 cordclamp, 1 lidocaine.', points: 1 },
-  { id: 12, text: 'Do handwashing again. Aseptically put on 2 pairs of sterile gloves (same worker). Wear gowns and gloves according to hospital policy.', points: 1 },
-  { id: 13, text: "Prep the perineal area with betadine aseptically. Also drape mother's abdomen with sterile eyesheet, mother's both legs with sterile leg cover.", points: 1 },
-  { id: 14, text: 'Encourage mother to push hard with close mouth and up to 10 seconds only during her intense contraction.', points: 1 },
-  { id: 15, text: "Apply perineal support and do controlled delivery of the head. (Ritgen's maneuver)", points: 1 },
-  { id: 16, text: 'Do controlled delivery of the head and body of the baby. Call out time of birth, gender of the baby, if cord coil or not, and the color of PCOM.', points: 1 },
-  { id: 17, text: 'Inform the mother of the outcome.', points: 1 },
-  { id: 18, text: 'Thoroughly dry baby for at least 30 seconds, (from eyes, face, head, chest, back, arms and legs) while performing a quick check for breathing.', points: 1 },
-  { id: 19, text: 'Remove the wet cloth.', points: 1 },
-  { id: 20, text: "Place the baby in skin-to-skin contact on the mother's abdomen/chest in between the breasts with the head turned to one side.", points: 1 },
-  { id: 21, text: 'Cover the baby with dry cloth.', points: 1 },
-  { id: 22, text: 'Remove the 1st set of gloves and decontaminate them properly', points: 1 },
-  { id: 23, text: 'Palpate umbilical cord to check pulsations.', points: 1 },
-  { id: 24, text: 'After pulsations stopped, clamp cord use plastic clamp 2 cm from the base.', points: 1 },
-  { id: 25, text: 'Place the instrument clamp 5 cm from the base.', points: 1 },
-  { id: 26, text: 'Cut near the plastic clamp (not midway).', points: 1 },
-  { id: 27, text: 'Perform the remaining steps of the AMTSL: Wait for strong Uterine Contractions, apply controlled cord traction and counter traction on the uterus until Placenta is delivered. Massage the uterus until firmed.', points: 1 },
-  { id: 28, text: 'Call out the time the placenta is out and its type. Examine the completeness and any abnormalities', points: 1 },
-  { id: 29, text: "Give oxytocin within one minute of the baby's birth according to the hospital policy either IM or incorporate at the IV", points: 1 },
-  { id: 30, text: 'Check the Blood pressure of the mother after placenta is out.', points: 1 },
-  { id: 31, text: 'Checks for firmness or boggy uterus. Massage the uterus if boggy.', points: 1 },
-  { id: 32, text: 'Inspect the vagina and perineum for lacerations.', points: 1 },
+  { id: 1, text: 'State the Definition', points: 5 },
+  { id: 2, text: 'State the Purpose', points: 5 },
+  { id: 3, text: 'Ensure that the mother is in her position of choice while in labor.', points: 5 },
+  { id: 4, text: 'Ask mother if she wishes to eat/drink or void.', points: 5 },
+  { id: 5, text: 'Communicate with the mother – inform her of the progress of labor, give reassurance and encouragement.', points: 5 },
+  { id: 6, text: 'Perform the Internal Examination if needed.', points: 5 },
+  { id: 7, text: "Transports clients safely to DR while providing privacy.", points: 5 },
+  { id: 8, text: 'Check temperature in the DR area to be 25-28o C, eliminate air drafts.', points: 5 },
+  { id: 9, text: 'Places mother in lithotomy position. And, ask a woman if she is comfortable in the semi-upright position.', points: 5 },
+  { id: 10, text: 'Perform Handwashing', points: 5 },
+  { id: 11, text: 'Arrange materials/supplies in a clear sequence: DR Pack (2 Kelly forceps, 1 allis forceps, 1 needle holder, 2 pads/Santex, 1 straight mayo scissor, 1 bandage scissor, 1 kidney basin, 1 eyesheet, 1 pair of lower and 2 receiving blanket) 2 Gloves, suturing needle, 1 10 cc syringe, 1 foley catheter, 1 cordclamp, 1 lidocaine.', points: 5 },
+  { id: 12, text: 'Do handwashing again. Aseptically put on 2 pairs of sterile gloves (same worker). Wear gowns and gloves according to hospital policy.', points: 5 },
+  { id: 13, text: "Prep the perineal area with betadine aseptically. Also drape mother's abdomen with sterile eyesheet, mother's both legs with sterile leg cover.", points: 5 },
+  { id: 14, text: 'Encourage mother to push hard with close mouth and up to 10 seconds only during her intense contraction.', points: 5 },
+  { id: 15, text: "Apply perineal support and do controlled delivery of the head. (Ritgen's maneuver)", points: 5 },
+  { id: 16, text: 'Do controlled delivery of the head and body of the baby. Call out time of birth, gender of the baby, if cord coil or not, and the color of PCOM.', points: 5 },
+  { id: 17, text: 'Inform the mother of the outcome.', points: 5 },
+  { id: 18, text: 'Thoroughly dry baby for at least 30 seconds, (from eyes, face, head, chest, back, arms and legs) while performing a quick check for breathing.', points: 5 },
+  { id: 19, text: 'Remove the wet cloth.', points: 5 },
+  { id: 20, text: "Place the baby in skin-to-skin contact on the mother's abdomen/chest in between the breasts with the head turned to one side.", points: 5 },
+  { id: 21, text: 'Cover the baby with dry cloth.', points: 5 },
+  { id: 22, text: 'Remove the 1st set of gloves and decontaminate them properly', points: 5 },
+  { id: 23, text: 'Palpate umbilical cord to check pulsations.', points: 5 },
+  { id: 24, text: 'After pulsations stopped, clamp cord use plastic clamp 2 cm from the base.', points: 5 },
+  { id: 25, text: 'Place the instrument clamp 5 cm from the base.', points: 5 },
+  { id: 26, text: 'Cut near the plastic clamp (not midway).', points: 5 },
+  { id: 27, text: 'Perform the remaining steps of the AMTSL: Wait for strong Uterine Contractions, apply controlled cord traction and counter traction on the uterus until Placenta is delivered. Massage the uterus until firmed.', points: 5 },
+  { id: 28, text: 'Call out the time the placenta is out and its type. Examine the completeness and any abnormalities', points: 5 },
+  { id: 29, text: "Give oxytocin within one minute of the baby's birth according to the hospital policy either IM or incorporate at the IV", points: 5 },
+  { id: 30, text: 'Check the Blood pressure of the mother after placenta is out.', points: 5 },
+  { id: 31, text: 'Checks for firmness or boggy uterus. Massage the uterus if boggy.', points: 5 },
+  { id: 32, text: 'Inspect the vagina and perineum for lacerations.', points: 5 },
   {
     id: 33,
     text: 'If episiotomy was performed, or if there is a laceration assist in perineorrhaphy.',
-    points: 4,
+    points: 20,
     subCriteria: [
       { id: '33a', text: 'a. Wait for the instruction from trained nurse, trained midwife' },
       { id: '33b', text: 'b. Hold the suture with traction and listen to the instruction' },
@@ -199,30 +323,50 @@ const laborAndDeliveryCriteria: PerformanceCriterion[] = [
       { id: '33d', text: 'd. Cut the thread when a trained nurse, trained midwife or' },
     ],
   },
-  { id: 34, text: 'Clean the perineum with water, apply betadine at the hymen area, and apply a perineal pad or diaper.', points: 1 },
-  { id: 35, text: 'Place mother in a comfortable position.', points: 1 },
-  { id: 36, text: 'Do aftercare and handwashing.', points: 1 },
-  { id: 37, text: 'Complete all the records.', points: 1 },
+  { id: 34, text: 'Clean the perineum with water, apply betadine at the hymen area, and apply a perineal pad or diaper.', points: 5 },
+  { id: 35, text: 'Place mother in a comfortable position.', points: 5 },
+  { id: 36, text: 'Do aftercare and handwashing.', points: 5 },
+  { id: 37, text: 'Complete all the records.', points: 5 },
 ];
 
+const normalizeProcedureName = (procedureName: string) =>
+  procedureName
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+
+const getProcedureKey = (procedureName: string) => {
+  const normalizedName = normalizeProcedureName(procedureName);
+
+  if (normalizedName === "LEOPOLD'S MANEUVER") return "Leopold's Maneuver";
+  if (normalizedName.startsWith('EINC')) return 'EINC';
+  if (normalizedName === 'LABOR AND DELIVERY') return 'Labor and Delivery';
+  if (normalizedName === 'INTRAMUSCULAR INJECTION') return 'Intramuscular Injection';
+  if (normalizedName === 'INTRADERMAL INJECTION') return 'Intradermal Injection';
+  if (normalizedName === 'NICU') return 'NICU';
+
+  return '';
+};
+
 const getProcedureCriteria = (procedureName: string): PerformanceCriterion[] => {
-  if (procedureName === "Leopold's Maneuver") return leopoldsManeuverCriteria;
-  if (procedureName === 'EINC') return eincCriteria;
-  if (procedureName === 'Labor and Delivery') return laborAndDeliveryCriteria;
-  if (procedureName === 'Intramuscular Injection') return intramuscularInjectionCriteria;
-  if (procedureName === 'Intradermal Injection') return intradermalInjectionCriteria;
-  if (procedureName === 'NICU') return nicuCriteria;
+  const procedureKey = getProcedureKey(procedureName);
+
+  if (procedureKey === "Leopold's Maneuver") return leopoldsManeuverCriteria;
+  if (procedureKey === 'EINC') return eincCriteria;
+  if (procedureKey === 'Labor and Delivery') return laborAndDeliveryCriteria;
+  if (procedureKey === 'Intramuscular Injection') return intramuscularInjectionCriteria;
+  if (procedureKey === 'Intradermal Injection') return intradermalInjectionCriteria;
+  if (procedureKey === 'NICU') return nicuCriteria;
   return [];
 };
 
 const getTotalPoints = (procedureName: string): number => {
-  if (procedureName === "Leopold's Maneuver") return 24;
-  if (procedureName === 'EINC') return 13;
-  if (procedureName === 'Labor and Delivery') return 40;
-  if (procedureName === 'Intramuscular Injection') return 25;
-  if (procedureName === 'Intradermal Injection') return 25;
-  if (procedureName === 'NICU') return 11;
-  return 0;
+  return getProcedureCriteria(procedureName).reduce(
+    (total, criterion) => total + criterion.points,
+    0
+  );
 };
 
 export function StudentEvaluationForm({
@@ -484,3 +628,4 @@ export function StudentEvaluationForm({
     </div>
   );
 }
+

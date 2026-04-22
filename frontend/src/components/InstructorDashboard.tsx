@@ -7,7 +7,6 @@ import { User, Bell, FileText, Users, LogOut } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
-import { signOutAndClearRememberedSession } from '@/lib/supabase/remember-me';
 import { AnnouncementForm } from './instructor/AnnouncementForm';
 import { ProcedureManagement } from './instructor/ProcedureManagement';
 import { StudentMasterlist } from './instructor/StudentMasterlist';
@@ -48,7 +47,7 @@ export function InstructorDashboard() {
   }, [supabase]);
 
   const handleLogout = async () => {
-    await signOutAndClearRememberedSession(supabase);
+    await supabase.auth.signOut();
     router.push('/');
   };
 
@@ -66,9 +65,9 @@ export function InstructorDashboard() {
             <Image
               src="/images/LOGO-removebg-preview.png"
               alt="Maternix Track"
-              width={200}
-              height={80}
-              className="h-14 md:h-16 w-auto"
+              width={120}
+              height={48}
+              className="h-12 w-auto"
             />
           </Link>
 

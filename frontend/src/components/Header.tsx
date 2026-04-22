@@ -27,9 +27,9 @@ export function Header() {
           <Image
             src="/images/LOGO-removebg-preview.png"
             alt="Maternix Track"
-            width={200}
-            height={80}
-            className="h-14 md:h-16 w-auto"
+            width={120}
+            height={48}
+            className="h-12 w-auto"
             onError={(e) => {
               const target = e.target as HTMLImageElement;
               target.style.display = 'none';

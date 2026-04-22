@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Header } from "@/components/Header";
-import { AuthSessionRestorer } from "@/components/AuthSessionRestorer";
 
 export const metadata: Metadata = {
   title: "Maternix Track",
@@ -17,7 +16,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-background" suppressHydrationWarning>
-        <AuthSessionRestorer />
         <Header />
         {children}
       </body>

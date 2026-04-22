@@ -10,33 +10,11 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname
 
-  const alwaysPublic = ['/about']
+  const alwaysPublic = ['/', '/about']
   const authRoutes = ['/login', '/signup', '/forgot-password', '/reset-password']
 
   if (alwaysPublic.some(p => path === p || path.startsWith(p + '/'))) {
     return response
-  }
-
-  if (path === '/') {
-    if (!user) {
-      return response
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, status')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.status === 'approved') {
-      return NextResponse.redirect(new URL(`/${profile.role}/dashboard`, request.url))
-    }
-
-    if (profile?.status === 'pending') {
-      return NextResponse.redirect(new URL('/pending-approval', request.url))
-    }
-
-    return NextResponse.redirect(new URL('/login', request.url))
   }
 
   // On auth routes: redirect already-logged-in approved users to their dashboard

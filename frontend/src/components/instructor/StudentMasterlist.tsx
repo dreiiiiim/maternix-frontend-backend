@@ -109,7 +109,7 @@ export function StudentMasterlist() {
       >
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-foreground mb-2">Student Masterlist</h2>
-          <p className="text-muted-foreground">View students across all sections</p>
+          <p className="text-muted-foreground">View students in your assigned sections</p>
         </div>
 
         {error && (
@@ -162,7 +162,7 @@ export function StudentMasterlist() {
           </div>
         ) : sections.length === 0 ? (
           <div className="bg-white border border-border rounded-xl p-8 text-center text-muted-foreground">
-            No sections available yet.
+            No sections assigned yet.
           </div>
         ) : (
           <div className="space-y-4">
