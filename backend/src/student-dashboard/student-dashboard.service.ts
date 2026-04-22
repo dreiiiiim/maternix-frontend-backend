@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
+import { UpdateStudentProfileDto } from './dto/update-student-profile.dto';
 
 type StudentDashboardResponse = {
   student: {
@@ -67,16 +68,109 @@ type StudentDashboardResponse = {
 export class StudentDashboardService {
   constructor(private readonly supabase: SupabaseService) {}
 
-  async getDashboard(accessToken: string): Promise<StudentDashboardResponse> {
-    const caller = await this.supabase.verifyAndGetProfile(accessToken);
+  async getProfile(accessToken: string) {
+    const caller = await this.requireApprovedStudent(accessToken);
+    const db = this.supabase.getServiceClient();
 
-    if (
-      !caller ||
-      caller.profile.role !== 'student' ||
-      caller.profile.status !== 'approved'
-    ) {
-      throw new UnauthorizedException('Approved student access required');
+    const [{ data: profile, error: profileError }, { data: student, error: studentError }] =
+      await Promise.all([
+        db
+          .from('profiles')
+          .select(
+            'id, first_name, last_name, full_name, email, phone_number, avatar_url, created_at'
+          )
+          .eq('id', caller.user.id)
+          .single(),
+        db
+          .from('students')
+          .select('student_no, year_level, sections(name)')
+          .eq('id', caller.user.id)
+          .single(),
+      ]);
+
+    const firstError = profileError ?? studentError;
+    if (firstError) {
+      throw new BadRequestException(firstError.message);
     }
+
+    if (!profile || !student) {
+      throw new BadRequestException('Profile not found');
+    }
+
+    const section = this.asArray((student as any).sections)[0];
+
+    return {
+      profile: {
+        id: profile.id,
+        firstName: profile.first_name ?? '',
+        lastName: profile.last_name ?? '',
+        fullName:
+          profile.full_name ??
+          `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim(),
+        email: profile.email,
+        phone: profile.phone_number ?? '',
+        avatarUrl: profile.avatar_url ?? null,
+        createdAt: profile.created_at,
+      },
+      student: {
+        studentNo: (student as any).student_no ?? '',
+        yearLevel: (student as any).year_level ?? '',
+        section: section?.name ?? '',
+      },
+    };
+  }
+
+  async updateProfile(accessToken: string, body: UpdateStudentProfileDto) {
+    const caller = await this.requireApprovedStudent(accessToken);
+    const db = this.supabase.getServiceClient();
+
+    const { data: existing, error: existingError } = await db
+      .from('profiles')
+      .select('first_name, last_name')
+      .eq('id', caller.user.id)
+      .single();
+
+    if (existingError || !existing) {
+      throw new BadRequestException(
+        existingError?.message ?? 'Profile not found'
+      );
+    }
+
+    const resolvedFirstName = (body.firstName ?? existing.first_name ?? '').trim();
+    const resolvedLastName = (body.lastName ?? existing.last_name ?? '').trim();
+
+    if (!resolvedFirstName || !resolvedLastName) {
+      throw new BadRequestException('First name and last name are required.');
+    }
+
+    const updatePayload: Record<string, string | null> = {
+      first_name: resolvedFirstName,
+      last_name: resolvedLastName,
+      full_name: `${resolvedFirstName} ${resolvedLastName}`.trim(),
+    };
+
+    if (body.phone !== undefined) {
+      updatePayload.phone_number = body.phone.trim();
+    }
+
+    if (body.avatarUrl !== undefined) {
+      updatePayload.avatar_url = body.avatarUrl?.trim() || null;
+    }
+
+    const { error: updateError } = await db
+      .from('profiles')
+      .update(updatePayload)
+      .eq('id', caller.user.id);
+
+    if (updateError) {
+      throw new BadRequestException(updateError.message);
+    }
+
+    return this.getProfile(accessToken);
+  }
+
+  async getDashboard(accessToken: string): Promise<StudentDashboardResponse> {
+    const caller = await this.requireApprovedStudent(accessToken);
 
     const db = this.supabase.getServiceClient();
     const userId = caller.user.id;
@@ -255,5 +349,19 @@ export class StudentDashboardService {
           day: 'numeric',
         })
       : null;
+  }
+
+  private async requireApprovedStudent(accessToken: string) {
+    const caller = await this.supabase.verifyAndGetProfile(accessToken);
+
+    if (
+      !caller ||
+      caller.profile.role !== 'student' ||
+      caller.profile.status !== 'approved'
+    ) {
+      throw new UnauthorizedException('Approved student access required');
+    }
+
+    return caller;
   }
 }

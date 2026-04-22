@@ -6,6 +6,13 @@ export const metadata: Metadata = {
   title: "Maternix Track",
   description:
     "Advanced clinical tracking for nursing students and instructors in maternal health education.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/images/LOGO-removebg-preview.png", type: "image/png" },
+    ],
+    apple: [{ url: "/images/LOGO-removebg-preview.png", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({

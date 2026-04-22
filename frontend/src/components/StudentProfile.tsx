@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
+import { getApiBaseUrl } from '@/lib/api-base-url'
 import { UserAvatar } from './UserAvatar'
 
 type ProfileForm = {
@@ -30,6 +31,7 @@ type ProfileForm = {
 
 export function StudentProfile() {
   const supabase = useMemo(() => createClient(), [])
+  const apiUrl = getApiBaseUrl()
   const [userId, setUserId] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -58,58 +60,46 @@ export function StudentProfile() {
       setError('')
 
       const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
 
-      if (userError || !user) {
+      if (sessionError || !session?.user || !session.access_token) {
         setError('Unable to load user session.')
         setLoading(false)
         return
       }
 
-      setUserId(user.id)
+      setUserId(session.user.id)
 
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('first_name, last_name, full_name, email, phone_number, avatar_url, created_at')
-        .eq('id', user.id)
-        .single()
+      const response = await fetch(`${apiUrl}/student/dashboard/profile`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
 
-      if (profileError || !profile) {
-        setError(profileError?.message ?? 'Profile not found.')
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok || !payload?.profile || !payload?.student) {
+        setError(payload?.message ?? 'Profile not found.')
         setLoading(false)
         return
       }
 
-      const { data: student, error: studentError } = await supabase
-        .from('students')
-        .select('student_no, year_level, sections(name)')
-        .eq('id', user.id)
-        .single()
-
-      if (studentError || !student) {
-        setError(studentError?.message ?? 'Student record not found.')
-        setLoading(false)
-        return
-      }
-
-      const section = Array.isArray(student.sections) ? student.sections[0] : student.sections
-
-      setProfilePhoto(profile.avatar_url ?? null)
-      setSavedProfilePhoto(profile.avatar_url ?? null)
+      setProfilePhoto(payload.profile.avatarUrl ?? null)
+      setSavedProfilePhoto(payload.profile.avatarUrl ?? null)
       const loadedFormData = {
-        firstName: profile.first_name ?? '',
-        lastName: profile.last_name ?? '',
-        email: profile.email,
-        phone: profile.phone_number ?? '',
-        enrollmentDate: new Date(profile.created_at).toLocaleDateString('en-US', {
+        firstName: payload.profile.firstName ?? '',
+        lastName: payload.profile.lastName ?? '',
+        email: payload.profile.email ?? '',
+        phone: payload.profile.phone ?? '',
+        enrollmentDate: new Date(payload.profile.createdAt).toLocaleDateString('en-US', {
           year: 'numeric',
           month: 'long',
           day: 'numeric',
         }),
-        studentId: student.student_no,
-        section: section?.name ?? '',
+        studentId: payload.student.studentNo ?? '',
+        section: payload.student.section ?? '',
       }
 
       setFormData(loadedFormData)
@@ -119,7 +109,7 @@ export function StudentProfile() {
     }
 
     fetchProfile()
-  }, [supabase])
+  }, [apiUrl, supabase])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -160,19 +150,35 @@ export function StudentProfile() {
       }
     }
 
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        first_name: updatedFormData.firstName,
-        last_name: updatedFormData.lastName,
-        full_name: `${updatedFormData.firstName} ${updatedFormData.lastName}`.trim(),
-        phone_number: updatedFormData.phone,
-        avatar_url: avatarUrl,
-      })
-      .eq('id', userId)
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
 
-    if (updateError) {
-      setError(updateError.message)
+    if (sessionError || !session?.access_token) {
+      setError('You must be logged in to update your profile.')
+      setSaving(false)
+      return
+    }
+
+    const response = await fetch(`${apiUrl}/student/dashboard/profile`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        firstName: updatedFormData.firstName,
+        lastName: updatedFormData.lastName,
+        phone: updatedFormData.phone,
+        avatarUrl: avatarUrl ?? undefined,
+      }),
+    })
+
+    const payload = await response.json().catch(() => null)
+
+    if (!response.ok) {
+      setError(payload?.message ?? 'Failed to update profile.')
       setSaving(false)
       return
     }
