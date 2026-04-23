@@ -164,32 +164,32 @@ All accounts use password: **`password123`**
 
 | Email                         | Name            | Student No   | Notes                                                                  |
 | ----------------------------- | --------------- | ------------ | ---------------------------------------------------------------------- |
-| `emily.rodriguez@nursing.edu` | Emily Rodriguez | NSG-2024-007 | **Main test student** — has evaluated + completed + pending procedures |
-| `maria.rodriguez@nursing.edu` | Maria Rodriguez | NSG-2024-001 | Leopold's completed                                                    |
-| `james.chen@nursing.edu`      | James Chen      | NSG-2024-002 | Leopold's evaluated, EINC completed                                    |
-| `sarah.thompson@nursing.edu`  | Sarah Thompson  | NSG-2024-003 | Leopold's + EINC pending                                               |
-| `david.kim@nursing.edu`       | David Kim       | NSG-2024-004 | Leopold's in progress                                                  |
-| `emily.martinez@nursing.edu`  | Emily Martinez  | NSG-2024-005 | Leopold's completed                                                    |
-| `michael.johnson@nursing.edu` | Michael Johnson | NSG-2024-006 | Leopold's pending                                                      |
+| `emily.rodriguez@nursing.edu` | Emily Rodriguez | 24-00007 | **Main test student** — has evaluated + completed + pending procedures |
+| `maria.rodriguez@nursing.edu` | Maria Rodriguez | 24-00001 | Leopold's completed                                                    |
+| `james.chen@nursing.edu`      | James Chen      | 24-00002 | Leopold's evaluated, EINC completed                                    |
+| `sarah.thompson@nursing.edu`  | Sarah Thompson  | 24-00003 | Leopold's + EINC pending                                               |
+| `david.kim@nursing.edu`       | David Kim       | 24-00004 | Leopold's in progress                                                  |
+| `emily.martinez@nursing.edu`  | Emily Martinez  | 24-00005 | Leopold's completed                                                    |
+| `michael.johnson@nursing.edu` | Michael Johnson | 24-00006 | Leopold's pending                                                      |
 
 ### Students — BSN 2B (Prof. Jennifer Lopez)
 
 | Email                         | Name            | Student No   | Notes                          |
 | ----------------------------- | --------------- | ------------ | ------------------------------ |
-| `lisa.anderson@nursing.edu`   | Lisa Anderson   | NSG-2024-008 | Labor and Delivery pending     |
-| `robert.taylor@nursing.edu`   | Robert Taylor   | NSG-2024-009 | Labor and Delivery pending     |
-| `jennifer.white@nursing.edu`  | Jennifer White  | NSG-2024-010 | Labor and Delivery completed   |
-| `christopher.lee@nursing.edu` | Christopher Lee | NSG-2024-011 | Labor and Delivery in progress |
-| `amanda.garcia@nursing.edu`   | Amanda Garcia   | NSG-2024-012 | Labor and Delivery pending     |
+| `lisa.anderson@nursing.edu`   | Lisa Anderson   | 24-00008 | Labor and Delivery pending     |
+| `robert.taylor@nursing.edu`   | Robert Taylor   | 24-00009 | Labor and Delivery pending     |
+| `jennifer.white@nursing.edu`  | Jennifer White  | 24-00010 | Labor and Delivery completed   |
+| `christopher.lee@nursing.edu` | Christopher Lee | 24-00011 | Labor and Delivery in progress |
+| `amanda.garcia@nursing.edu`   | Amanda Garcia   | 24-00012 | Labor and Delivery pending     |
 
 ### Students — BSN 2C (no instructor assigned)
 
 | Email                        | Name           | Student No   |
 | ---------------------------- | -------------- | ------------ |
-| `daniel.brown@nursing.edu`   | Daniel Brown   | NSG-2024-013 |
-| `jessica.davis@nursing.edu`  | Jessica Davis  | NSG-2024-014 |
-| `matthew.wilson@nursing.edu` | Matthew Wilson | NSG-2024-015 |
-| `ashley.miller@nursing.edu`  | Ashley Miller  | NSG-2024-016 |
+| `daniel.brown@nursing.edu`   | Daniel Brown   | 24-00013 |
+| `jessica.davis@nursing.edu`  | Jessica Davis  | 24-00014 |
+| `matthew.wilson@nursing.edu` | Matthew Wilson | 24-00015 |
+| `ashley.miller@nursing.edu`  | Ashley Miller  | 24-00016 |
 
 ---
 
@@ -280,6 +280,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
 Important:
+
 - Do not use `http://localhost:3001` for production.
 - The app now fails production build if backend URL is missing or localhost.
 

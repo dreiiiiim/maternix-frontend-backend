@@ -41,6 +41,7 @@ type StudentProcedureRow = {
   procedure_id: string;
   status: 'pending' | 'in_progress' | 'completed' | 'evaluated';
   notes: string | null;
+  profiles?: { first_name: string; last_name: string };
 };
 
 type EvaluationRow = {
@@ -48,6 +49,7 @@ type EvaluationRow = {
   student_id: string;
   procedure_id: string;
   feedback: string | null;
+  profiles?: { first_name: string; last_name: string };
 };
 
 type ProcedureRecord = {
@@ -302,11 +304,11 @@ export class InstructorDashboardService {
       ] = await Promise.all([
         db
           .from('student_procedures')
-          .select('id, student_id, procedure_id, status, notes')
+          .select('id, student_id, procedure_id, status, notes, profiles!allowed_by(first_name, last_name)')
           .in('student_id', allStudentIds),
         db
           .from('evaluations')
-          .select('id, student_id, procedure_id, feedback')
+          .select('id, student_id, procedure_id, feedback, profiles!instructor_id(first_name, last_name)')
           .in('student_id', allStudentIds),
       ]);
 
@@ -579,6 +581,7 @@ export class InstructorDashboardService {
         student_id: studentId,
         procedure_id: procedureId,
         status: 'pending',
+        allowed_by: caller.user.id,
       })),
       { onConflict: 'student_id,procedure_id', ignoreDuplicates: true }
     );

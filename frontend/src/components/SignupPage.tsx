@@ -82,8 +82,8 @@ export function SignupPage() {
         setError('Student number and section are required.')
         return
       }
-      if (!/^NSG-\d{4}-\d{5}$/.test(formData.studentNo)) {
-        setError('Student ID must follow the format NSG-0000-00000 (digits only).')
+      if (!/^\d{2}-\d{5}$/.test(formData.studentNo)) {
+        setError('Student ID must follow the format 00-00000 (e.g., 22-00133).')
         return
       }
     }
@@ -323,10 +323,14 @@ export function SignupPage() {
                     value={formData.studentNo}
                     onChange={handleChange}
                     className="w-full px-4 py-3 rounded-lg border border-border bg-input-background focus:outline-none focus:ring-2"
-                    placeholder="NSG-0000-00000"
+                    placeholder="00-00000"
+                    pattern="\d{2}-\d{5}"
+                    maxLength={8}
+                    title="Expected format: 00-00000 (e.g., 22-00133)"
                     required
                     suppressHydrationWarning
                   />
+                  <p className="text-xs text-muted-foreground mt-1">Format: YY-NNNNN (e.g., 22-00133)</p>
                 </div>
                 <div>
                   <label htmlFor="sectionId" className="block text-sm font-medium mb-2 text-foreground">
@@ -470,3 +474,4 @@ export function SignupPage() {
     </div>
   )
 }
+

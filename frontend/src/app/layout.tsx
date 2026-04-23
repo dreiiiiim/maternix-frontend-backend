@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Header } from "@/components/Header";
+import { DisclaimerBanner } from "@/components/DisclaimerBanner";
+
 
 export const metadata: Metadata = {
   title: "Maternix Track",
@@ -23,9 +25,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-background" suppressHydrationWarning>
+        <DisclaimerBanner />
         <Header />
         {children}
       </body>
+
     </html>
   );
 }

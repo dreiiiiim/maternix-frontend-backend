@@ -11,7 +11,7 @@ import { createClient } from '@/lib/supabase/client';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { UserAvatar } from './UserAvatar';
 
-const STUDENT_ID_REGEX = /^NSG-\d{4}-\d{5}$/;
+const STUDENT_ID_REGEX = /^\d{2}-\d{5}$/;
 const EMPLOYEE_ID_REGEX = /^EMP-\d{4}-\d{4}$/;
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -352,7 +352,7 @@ export function AdminDashboard() {
 
   const handleUpdateStudent = async (student: Student) => {
     if (!STUDENT_ID_REGEX.test(student.studentId)) {
-      toast.error('Invalid Student ID format. Expected: NSG-0000-00000');
+      toast.error('Invalid Student ID format. Expected: 00-00000');
       return;
     }
 
@@ -1135,10 +1135,10 @@ export function AdminDashboard() {
                     value={editingStudent.studentId}
                     onChange={(e) => setEditingStudent({ ...editingStudent, studentId: e.target.value })}
                     className="w-full px-4 py-2 rounded-lg border border-border bg-input-background"
-                    placeholder="NSG-0000-00000"
+                    placeholder="00-00000"
                     required
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Format: NSG-YYYY-NNNNN (e.g., NSG-2024-12345)</p>
+                  <p className="text-xs text-muted-foreground mt-1">Format: YY-NNNNN (e.g., 22-00133)</p>
                 </div>
 
                 <div className="pt-4 flex gap-3">

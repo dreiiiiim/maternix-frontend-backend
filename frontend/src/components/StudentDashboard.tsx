@@ -41,6 +41,7 @@ type Procedure = {
   category: string;
   description: string | null;
   allowedBy: string | null;
+  unlockedBy: string | null;
   allowedDate: string | null;
   status: 'pending' | 'in_progress' | 'completed' | 'evaluated' | 'locked';
   completedDate: string | null;
@@ -483,9 +484,17 @@ export function StudentDashboard() {
                             procedure.status === 'locked' ? 'text-muted-foreground' : 'text-foreground'
                           }`}
                         >
-                          {procedure.allowedBy ?? '—'}
+                          {procedure.status === 'locked' ? procedure.allowedBy ?? '—' : procedure.unlockedBy ?? procedure.allowedBy ?? '—'}
                         </span>
                       </div>
+                      {procedure.status === 'evaluated' && (
+                        <div>
+                          <span className="text-muted-foreground">Evaluated by:</span>
+                          <span className="ml-2 font-medium text-foreground">
+                            {procedure.evaluation?.evaluatorName ?? '—'}
+                          </span>
+                        </div>
+                      )}
                       {procedure.status !== 'locked' && (
                         <div>
                           <span className="text-muted-foreground">
@@ -593,9 +602,23 @@ export function StudentDashboard() {
 
               <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b border-border">
                 <div>
-                  <div className="text-sm text-muted-foreground mb-1">Allowed by</div>
-                  <div className="font-medium text-foreground">{selectedProcedure.allowedBy ?? '—'}</div>
+                  <div className="text-sm text-muted-foreground mb-1">
+                    {selectedProcedure.status === 'locked' ? 'Instructor' : 'Unlocked by'}
+                  </div>
+                  <div className="font-medium text-foreground">
+                    {selectedProcedure.status === 'locked' 
+                      ? selectedProcedure.allowedBy ?? '—' 
+                      : selectedProcedure.unlockedBy ?? selectedProcedure.allowedBy ?? '—'}
+                  </div>
                 </div>
+                {selectedProcedure.status === 'evaluated' && (
+                  <div>
+                    <div className="text-sm text-muted-foreground mb-1">Evaluated by</div>
+                    <div className="font-medium text-foreground">
+                      {selectedProcedure.evaluation?.evaluatorName ?? '—'}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <div className="text-sm text-muted-foreground mb-1">Date Allowed</div>
                   <div className="font-medium text-foreground">{selectedProcedure.allowedDate ?? '—'}</div>

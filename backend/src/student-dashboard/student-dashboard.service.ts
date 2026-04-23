@@ -29,6 +29,7 @@ type StudentDashboardResponse = {
     category: string;
     description: string | null;
     allowedBy: string | null;
+    unlockedBy: string | null;
     allowedDate: string | null;
     status: 'pending' | 'in_progress' | 'completed' | 'evaluated' | 'locked';
     completedDate: string | null;
@@ -191,7 +192,7 @@ export class StudentDashboardService {
         db
           .from('student_procedures')
           .select(
-            'id, procedure_id, status, notes, completed_at, created_at'
+            'id, procedure_id, status, notes, completed_at, created_at, profiles!allowed_by(first_name, last_name)'
           )
           .eq('student_id', userId),
         db
@@ -269,6 +270,9 @@ export class StudentDashboardService {
         category: procedure.category ?? 'Clinical Procedure',
         description: procedure.description ?? null,
         allowedBy: creatorName || null,
+        unlockedBy: assigned?.profiles
+          ? `${assigned.profiles.first_name ?? ''} ${assigned.profiles.last_name ?? ''}`.trim()
+          : null,
         allowedDate: assigned ? this.formatDate(assigned.created_at) : null,
         status: (assigned?.status ?? 'locked') as
           | 'pending'

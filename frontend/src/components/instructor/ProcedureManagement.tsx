@@ -46,6 +46,7 @@ type StudentProcedure = {
   procedure_id: string
   status: 'pending' | 'in_progress' | 'completed' | 'evaluated'
   notes: string | null
+  profiles?: { first_name: string; last_name: string }
 }
 
 type EvaluationRecord = {
@@ -53,6 +54,7 @@ type EvaluationRecord = {
   student_id: string
   procedure_id: string
   feedback: string | null
+  profiles?: { first_name: string; last_name: string }
 }
 
 type EvaluationPayload = {
@@ -508,8 +510,18 @@ export function ProcedureManagement() {
                               </button>
                             )}
                           </div>
-                          <div className="text-sm mt-2">
-                            Status: <b>{row.status}</b>
+                          <div className="text-sm mt-2 text-muted-foreground">
+                            Status: <b className="text-foreground">{row.status}</b>
+                            {row.profiles && (
+                              <span className="ml-2">
+                                • Unlocked by: <b>{row.profiles.first_name} {row.profiles.last_name}</b>
+                              </span>
+                            )}
+                            {evaluation?.profiles && (
+                              <span className="ml-2">
+                                • Evaluated by: <b>{evaluation.profiles.first_name} {evaluation.profiles.last_name}</b>
+                              </span>
+                            )}
                           </div>
                           {row.notes && (
                             <div className="text-sm text-muted-foreground mt-1">

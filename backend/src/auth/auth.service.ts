@@ -39,9 +39,9 @@ export class AuthService {
       if (!dto.studentNo || (!dto.sectionId && !dto.section)) {
         throw new BadRequestException('studentNo and section are required for student role');
       }
-      const studentNoRegex = /^NSG-\d{4}-\d{5}$/;
+      const studentNoRegex = /^\d{2}-\d{5}$/;
       if (!studentNoRegex.test(dto.studentNo)) {
-        throw new BadRequestException('Student ID must follow the format NSG-0000-00000 (digits only)');
+        throw new BadRequestException('Student ID must follow the format 00-00000 (e.g., 22-00133)');
       }
     }
 
