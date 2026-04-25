@@ -4,6 +4,11 @@ A web-based clinical skills tracking system for nursing students in **RLE 107: C
 
 ---
 
+$env:BACKEND_URL="https://maternix-frontend-backend-production.up.railway.app"
+$env:NEXT_PUBLIC_API_URL="https://maternix-frontend-backend-production.up.railway.app"
+$env:NEXT_PUBLIC_APP_URL="https://maternix-frontend-backend2.andrei-montaniel-cics.workers.dev"
+npm run build
+
 ## Tech Stack
 
 | Layer           | Technology                  |
@@ -162,34 +167,34 @@ All accounts use password: **`password123`**
 
 ### Students — BSN 2A (Dr. Sarah Mitchell)
 
-| Email                         | Name            | Student No   | Notes                                                                  |
-| ----------------------------- | --------------- | ------------ | ---------------------------------------------------------------------- |
-| `emily.rodriguez@nursing.edu` | Emily Rodriguez | 24-00007 | **Main test student** — has evaluated + completed + pending procedures |
-| `maria.rodriguez@nursing.edu` | Maria Rodriguez | 24-00001 | Leopold's completed                                                    |
-| `james.chen@nursing.edu`      | James Chen      | 24-00002 | Leopold's evaluated, EINC completed                                    |
-| `sarah.thompson@nursing.edu`  | Sarah Thompson  | 24-00003 | Leopold's + EINC pending                                               |
-| `david.kim@nursing.edu`       | David Kim       | 24-00004 | Leopold's in progress                                                  |
-| `emily.martinez@nursing.edu`  | Emily Martinez  | 24-00005 | Leopold's completed                                                    |
-| `michael.johnson@nursing.edu` | Michael Johnson | 24-00006 | Leopold's pending                                                      |
+| Email                         | Name            | Student No | Notes                                                                  |
+| ----------------------------- | --------------- | ---------- | ---------------------------------------------------------------------- |
+| `emily.rodriguez@nursing.edu` | Emily Rodriguez | 24-00007   | **Main test student** — has evaluated + completed + pending procedures |
+| `maria.rodriguez@nursing.edu` | Maria Rodriguez | 24-00001   | Leopold's completed                                                    |
+| `james.chen@nursing.edu`      | James Chen      | 24-00002   | Leopold's evaluated, EINC completed                                    |
+| `sarah.thompson@nursing.edu`  | Sarah Thompson  | 24-00003   | Leopold's + EINC pending                                               |
+| `david.kim@nursing.edu`       | David Kim       | 24-00004   | Leopold's in progress                                                  |
+| `emily.martinez@nursing.edu`  | Emily Martinez  | 24-00005   | Leopold's completed                                                    |
+| `michael.johnson@nursing.edu` | Michael Johnson | 24-00006   | Leopold's pending                                                      |
 
 ### Students — BSN 2B (Prof. Jennifer Lopez)
 
-| Email                         | Name            | Student No   | Notes                          |
-| ----------------------------- | --------------- | ------------ | ------------------------------ |
-| `lisa.anderson@nursing.edu`   | Lisa Anderson   | 24-00008 | Labor and Delivery pending     |
-| `robert.taylor@nursing.edu`   | Robert Taylor   | 24-00009 | Labor and Delivery pending     |
-| `jennifer.white@nursing.edu`  | Jennifer White  | 24-00010 | Labor and Delivery completed   |
-| `christopher.lee@nursing.edu` | Christopher Lee | 24-00011 | Labor and Delivery in progress |
-| `amanda.garcia@nursing.edu`   | Amanda Garcia   | 24-00012 | Labor and Delivery pending     |
+| Email                         | Name            | Student No | Notes                          |
+| ----------------------------- | --------------- | ---------- | ------------------------------ |
+| `lisa.anderson@nursing.edu`   | Lisa Anderson   | 24-00008   | Labor and Delivery pending     |
+| `robert.taylor@nursing.edu`   | Robert Taylor   | 24-00009   | Labor and Delivery pending     |
+| `jennifer.white@nursing.edu`  | Jennifer White  | 24-00010   | Labor and Delivery completed   |
+| `christopher.lee@nursing.edu` | Christopher Lee | 24-00011   | Labor and Delivery in progress |
+| `amanda.garcia@nursing.edu`   | Amanda Garcia   | 24-00012   | Labor and Delivery pending     |
 
 ### Students — BSN 2C (no instructor assigned)
 
-| Email                        | Name           | Student No   |
-| ---------------------------- | -------------- | ------------ |
-| `daniel.brown@nursing.edu`   | Daniel Brown   | 24-00013 |
-| `jessica.davis@nursing.edu`  | Jessica Davis  | 24-00014 |
-| `matthew.wilson@nursing.edu` | Matthew Wilson | 24-00015 |
-| `ashley.miller@nursing.edu`  | Ashley Miller  | 24-00016 |
+| Email                        | Name           | Student No |
+| ---------------------------- | -------------- | ---------- |
+| `daniel.brown@nursing.edu`   | Daniel Brown   | 24-00013   |
+| `jessica.davis@nursing.edu`  | Jessica Davis  | 24-00014   |
+| `matthew.wilson@nursing.edu` | Matthew Wilson | 24-00015   |
+| `ashley.miller@nursing.edu`  | Ashley Miller  | 24-00016   |
 
 ---
 
@@ -283,6 +288,14 @@ Important:
 
 - Do not use `http://localhost:3001` for production.
 - The app now fails production build if backend URL is missing or localhost.
+- For a local production build in PowerShell, run:
+
+```powershell
+$env:BACKEND_URL="https://your-backend-domain.com"
+$env:NEXT_PUBLIC_API_URL="https://your-backend-domain.com"
+$env:NEXT_PUBLIC_APP_URL="https://your-frontend-domain.com"
+npm run build
+```
 
 ### 3. Deploy frontend Worker
 
@@ -290,8 +303,13 @@ From `frontend/`:
 
 ```bash
 npm run build
-npm run deploy
+npm run deploy:built
 ```
+
+If your host has only one deploy command field, use `npm run deploy`; it runs the
+Cloudflare build before deploying. If your host has separate build and deploy
+fields, set the build command to `npm run build` and the deploy command to
+`npm run deploy:built`.
 
 ### 4. Map custom domain in Cloudflare
 
