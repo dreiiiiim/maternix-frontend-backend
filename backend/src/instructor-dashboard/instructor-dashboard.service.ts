@@ -320,8 +320,14 @@ export class InstructorDashboardService {
         throw new BadRequestException(evaluationError.message);
       }
 
-      studentProcedures = (spData ?? []) as StudentProcedureRow[];
-      evaluations = (evaluationData ?? []) as EvaluationRow[];
+      studentProcedures = (spData ?? []).map((row: any) => ({
+        ...row,
+        profiles: this.asArray(row.profiles)[0] || null,
+      })) as StudentProcedureRow[];
+      evaluations = (evaluationData ?? []).map((row: any) => ({
+        ...row,
+        profiles: this.asArray(row.profiles)[0] || null,
+      })) as EvaluationRow[];
     }
 
     if (toggleStudentIds.length > 0) {

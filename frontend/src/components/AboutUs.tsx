@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useState } from 'react';
+import { teamMembers } from './teamData';
+
 
 export function AboutUs() {
   const [aboutImgError, setAboutImgError] = useState(false);
@@ -133,6 +135,59 @@ export function AboutUs() {
                 </h3>
                 <p className="text-muted-foreground text-center">{feature.description}</p>
               </div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* Meet Our Team Section */}
+        <motion.div
+          initial={{ y: 30, opacity: 0 }}
+          whileInView={{ y: 0, opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          className="mt-32"
+        >
+          <h2
+            className="text-4xl font-bold text-center mb-4"
+            style={{ color: 'var(--brand-green-dark)' }}
+          >
+            Meet Our Team
+          </h2>
+          <p className="text-center text-muted-foreground mb-16 max-w-2xl mx-auto text-lg font-medium">
+            The dedicated team behind Maternix Track, committed to excellence in nursing education.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
+            {teamMembers.map((member, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                whileHover={{ y: -10 }}
+                className="group bg-white rounded-[2.5rem] overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-500 border border-border/40"
+              >
+                <div className="relative aspect-[4/5] overflow-hidden">
+                  <Image
+                    src={member.image}
+                    alt={member.name}
+                    fill
+                    className="object-cover transition-transform duration-700 group-hover:scale-110"
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 flex flex-col justify-end p-8 text-white">
+                    <p className="text-sm font-medium tracking-widest uppercase mb-1 text-pink-200">Nursing Education</p>
+                    <h4 className="text-xl font-bold leading-tight">{member.name}</h4>
+                  </div>
+                </div>
+                <div className="p-8 text-center bg-white border-t border-border/10">
+                  <h3 className="text-xl font-extrabold text-foreground tracking-tight group-hover:text-[var(--brand-green-dark)] transition-colors duration-300">
+                    {member.name}
+                  </h3>
+                  <div className="w-12 h-1 bg-[var(--brand-pink-dark)] mx-auto mt-4 rounded-full transform origin-left transition-all duration-500 group-hover:w-24" />
+                </div>
+              </motion.div>
             ))}
           </div>
         </motion.div>
