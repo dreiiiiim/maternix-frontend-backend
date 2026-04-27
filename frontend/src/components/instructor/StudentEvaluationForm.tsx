@@ -20,7 +20,7 @@ type StudentEvaluationFormProps = {
   initialFeedback?: string;
   saveLabel?: string;
   onClose: () => void;
-  onSave: (data: unknown) => void;
+  onSave: (data: unknown) => Promise<boolean> | boolean;
 };
 
 const leopoldsManeuverCriteria: PerformanceCriterion[] = [
@@ -382,6 +382,7 @@ export function StudentEvaluationForm({
   >({});
   const [feedback, setFeedback] = useState('');
   const [saved, setSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const criteria = getProcedureCriteria(procedureName);
   const totalPoints = getTotalPoints(procedureName);
@@ -390,6 +391,7 @@ export function StudentEvaluationForm({
     setFeedback(initialFeedback ?? '');
     setEvaluations({});
     setSaved(false);
+    setIsSaving(false);
     setError('');
   }, [initialFeedback, procedureName, studentName]);
 
@@ -403,7 +405,7 @@ export function StudentEvaluationForm({
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const missingCriteria = criteria.some((criterion) => {
       if (criterion.subCriteria) {
         return criterion.subCriteria.some((sub) => !evaluations[sub.id]);
@@ -418,7 +420,17 @@ export function StudentEvaluationForm({
     }
 
     setError('');
-    onSave({ evaluations, feedback });
+    setIsSaving(true);
+
+    try {
+      const saveSucceeded = await onSave({ evaluations, feedback });
+      if (!saveSucceeded) {
+        return;
+      }
+    } finally {
+      setIsSaving(false);
+    }
+
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -603,7 +615,7 @@ export function StudentEvaluationForm({
               </button>
               <button
                 onClick={handleSave}
-                disabled={saved}
+                disabled={saved || isSaving}
                 className="px-6 py-2 text-white rounded-lg transition-all hover:scale-105 flex items-center gap-2"
                 style={{
                   backgroundColor: saved ? 'var(--brand-green-medium)' : 'var(--brand-green-dark)',
@@ -613,6 +625,11 @@ export function StudentEvaluationForm({
                   <>
                     <CheckCircle className="w-5 h-5" />
                     Saved!
+                  </>
+                ) : isSaving ? (
+                  <>
+                    <Save className="w-5 h-5" />
+                    Saving...
                   </>
                 ) : (
                   <>
@@ -628,4 +645,3 @@ export function StudentEvaluationForm({
     </div>
   );
 }
-

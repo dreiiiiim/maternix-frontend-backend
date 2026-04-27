@@ -38,7 +38,7 @@ export function AboutUs() {
               className="rounded-3xl p-10"
               style={{ backgroundColor: 'var(--brand-pink-light)' }}
             >
-              <p className="text-lg leading-relaxed text-foreground">
+              <p className="text-lg leading-relaxed text-foreground text-justify">
                 Maternix Track is a website monitoring system designed to track and manage
                 students&apos; performance in Return Demonstrations (RETDEMs) under the course RLE
                 107: Care of Mother, Child, and Adolescent (Well Client). It allows students and

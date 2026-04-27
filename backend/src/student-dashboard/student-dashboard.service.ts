@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { UpdateStudentProfileDto } from './dto/update-student-profile.dto';
+import { sortProceduresByName } from '../common/procedure-order';
 
 type StudentDashboardResponse = {
   student: {
@@ -335,7 +336,10 @@ export class StudentDashboardService {
         avatarUrl: profile.avatar_url ?? null,
       },
       stats,
-      procedures: mappedProcedures,
+      procedures: sortProceduresByName(
+        mappedProcedures,
+        (procedure) => procedure.name
+      ),
       announcements: mappedAnnouncements,
     };
   }

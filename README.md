@@ -7,7 +7,7 @@ A web-based clinical skills tracking system for nursing students in **RLE 107: C
 $env:BACKEND_URL="https://maternix-frontend-backend-production.up.railway.app"
 $env:NEXT_PUBLIC_API_URL="https://maternix-frontend-backend-production.up.railway.app"
 $env:NEXT_PUBLIC_APP_URL="https://maternix-frontend-backend2.andrei-montaniel-cics.workers.dev"
-npm run build
+npm run build:cloudflare
 
 ## Tech Stack
 
@@ -156,7 +156,7 @@ All accounts use password: **`password123`**
 
 | Email                     | Notes                                              |
 | ------------------------- | -------------------------------------------------- |
-| `admin@maternixtrack.edu` | Full access: sections, instructors, user approvals |
+| `dapla.lmje@shc.edu.ph` | Full access: sections, instructors, user approvals |
 
 ### Instructors
 
@@ -252,7 +252,8 @@ All commands run from `frontend/`:
 
 ```bash
 npm run dev      # Start development server with hot reload
-npm run build    # Build for production
+npm run build    # Local Next.js production build
+npm run build:cloudflare # Cloudflare/OpenNext production bundle
 npm run start    # Start production server (run build first)
 npm run lint     # Run ESLint
 ```
@@ -294,7 +295,7 @@ Important:
 $env:BACKEND_URL="https://your-backend-domain.com"
 $env:NEXT_PUBLIC_API_URL="https://your-backend-domain.com"
 $env:NEXT_PUBLIC_APP_URL="https://your-frontend-domain.com"
-npm run build
+npm run build:cloudflare
 ```
 
 ### 3. Deploy frontend Worker
@@ -302,13 +303,18 @@ npm run build
 From `frontend/`:
 
 ```bash
-npm run build
+npm run build:cloudflare
 npm run deploy:built
 ```
 
+If you are building the Cloudflare bundle on Windows and your project path contains an apostrophe
+(for example `Nelson's Laptop`), `opennextjs-cloudflare` may fail while bundling. In that case,
+run the deploy build from WSL or move the project to a path without apostrophes before running
+`npm run build:cloudflare`.
+
 If your host has only one deploy command field, use `npm run deploy`; it runs the
 Cloudflare build before deploying. If your host has separate build and deploy
-fields, set the build command to `npm run build` and the deploy command to
+fields, set the build command to `npm run build:cloudflare` and the deploy command to
 `npm run deploy:built`.
 
 ### 4. Map custom domain in Cloudflare

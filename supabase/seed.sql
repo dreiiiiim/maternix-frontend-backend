@@ -18,6 +18,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 --   BSN 2C  : 10000000-0000-0000-0000-000000000003
 -- Admin
 --   System Admin  : 20000000-0000-0000-0000-000000000001
+--   Licel Marie Joy E. Dapla : 20000000-0000-0000-0000-000000000002
 -- Instructors
 --   Dr. Sarah Mitchell    : 30000000-0000-0000-0000-000000000001
 --   Prof. Jennifer Lopez  : 30000000-0000-0000-0000-000000000002
@@ -66,6 +67,9 @@ VALUES
   -- Admin
   ('20000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated',
    'admin@maternixtrack.edu',   crypt('password123',gen_salt('bf')), now(),
+   '{"provider":"email","providers":["email"]}','{}', now(),now(),false,'','','',''),
+  ('20000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000000','authenticated','authenticated',
+   'dapla.lmje@shc.edu.ph', crypt('password123',gen_salt('bf')), now(),
    '{"provider":"email","providers":["email"]}','{}', now(),now(),false,'','','',''),
 
   -- Instructors
@@ -142,6 +146,10 @@ VALUES
    '20000000-0000-0000-0000-000000000001',
    '{"sub":"20000000-0000-0000-0000-000000000001","email":"admin@maternixtrack.edu"}',
    'email', now(), now(), now()),
+  ('20000000-0000-0000-0000-000000000002',
+   '20000000-0000-0000-0000-000000000002',
+   '{"sub":"20000000-0000-0000-0000-000000000002","email":"dapla.lmje@shc.edu.ph"}',
+   'email', now(), now(), now()),
 
   -- Instructors
   ('30000000-0000-0000-0000-000000000001',
@@ -200,6 +208,7 @@ INSERT INTO public.profiles (id, full_name, email, role, status)
 VALUES
   -- Admin
   ('20000000-0000-0000-0000-000000000001', 'System Admin',         'admin@maternixtrack.edu',    'admin',      'approved'),
+  ('20000000-0000-0000-0000-000000000002', 'Licel Marie Joy E. Dapla', 'dapla.lmje@shc.edu.ph', 'admin', 'approved'),
   -- Instructors
   ('30000000-0000-0000-0000-000000000001', 'Dr. Sarah Mitchell',   'sarah.mitchell@nursing.edu', 'instructor', 'approved'),
   ('30000000-0000-0000-0000-000000000002', 'Prof. Jennifer Lopez', 'jennifer.lopez@nursing.edu', 'instructor', 'approved'),
@@ -276,6 +285,7 @@ ON CONFLICT (id) DO NOTHING;
 -- Role        | Email                            | Password
 -- ------------|----------------------------------|------------
 -- Admin       | admin@maternixtrack.edu          | password123
+-- Admin       | dapla.lmje@shc.edu.ph            | password123
 -- Instructor  | sarah.mitchell@nursing.edu       | password123
 -- Instructor  | jennifer.lopez@nursing.edu       | password123
 -- Student 2A  | emily.rodriguez@nursing.edu      | password123  ← main test student

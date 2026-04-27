@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\"",
+    "predev": "npm run clean",
+    "prebuild": "npm run clean",
+    "prebuild:cloudflare": "npm run clean",
     "dev": "next dev",
-    "build": "next build && opennextjs-cloudflare build --skipNextBuild",
+    "build": "next build",
+    "build:cloudflare": "next build && opennextjs-cloudflare build --skipNextBuild",
     "start": "next start",
     "lint": "next lint",
     "preview": "opennextjs-cloudflare preview",
-    "deploy": "npm run build && npm run deploy:built",
+    "deploy": "npm run build:cloudflare && npm run deploy:built",
     "deploy:built": "opennextjs-cloudflare deploy"
   },
   "dependencies": {

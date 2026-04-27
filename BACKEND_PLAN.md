@@ -41,7 +41,7 @@ SMTP_SECURE=false
 SMTP_USER=maternixtrack@gmail.com
 SMTP_PASS=your-app-password
 EMAIL_FROM="Maternix Track <maternixtrack@gmail.com>"
-ADMIN_EMAIL=admin@maternixtrack.edu
+ADMIN_EMAIL=dapla.lmje@shc.edu.ph
 
 # App
 PORT=3001
@@ -251,7 +251,7 @@ INSERT INTO public.sections (name, semester) VALUES
 
 -- Seed admin (replace UUID with real auth.users ID after creating admin in Supabase Dashboard)
 -- INSERT INTO public.profiles (id, full_name, email, role, status)
--- VALUES ('<admin-auth-uuid>', 'System Admin', 'admin@maternixtrack.edu', 'admin', 'approved');
+-- VALUES ('<admin-auth-uuid>', 'System Admin', 'dapla.lmje@shc.edu.ph', 'admin', 'approved');
 ```
 
 ---

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { calculateProcedureGrade } from './evaluation-grading';
+import { sortProceduresByName } from '../common/procedure-order';
 
 type InstructorDashboardResponse = {
   instructor: {
@@ -48,7 +49,11 @@ type EvaluationRow = {
   id: string;
   student_id: string;
   procedure_id: string;
+  overall_score: number | null;
+  max_score: number | null;
+  competency_status: string | null;
   feedback: string | null;
+  evaluation_date: string | null;
   profiles?: { first_name: string; last_name: string };
 };
 
@@ -308,7 +313,9 @@ export class InstructorDashboardService {
           .in('student_id', allStudentIds),
         db
           .from('evaluations')
-          .select('id, student_id, procedure_id, feedback, profiles!instructor_id(first_name, last_name)')
+          .select(
+            'id, student_id, procedure_id, overall_score, max_score, competency_status, feedback, evaluation_date, profiles!instructor_id(first_name, last_name)'
+          )
           .in('student_id', allStudentIds),
       ]);
 
@@ -380,17 +387,20 @@ export class InstructorDashboardService {
     }
 
     return {
-      procedures: ((proceduresData ?? []) as any[]).map((procedure) => ({
-        id: procedure.id,
-        name: procedure.name,
-        category: procedure.category,
-        description: procedure.description ?? '',
-        resources: this.asArray(procedure.procedure_resources).map((resource: any) => ({
-          type: resource.type as 'file' | 'link',
-          name: resource.name as string,
-          url: resource.url as string,
+      procedures: sortProceduresByName(
+        ((proceduresData ?? []) as any[]).map((procedure) => ({
+          id: procedure.id,
+          name: procedure.name,
+          category: procedure.category,
+          description: procedure.description ?? '',
+          resources: this.asArray(procedure.procedure_resources).map((resource: any) => ({
+            type: resource.type as 'file' | 'link',
+            name: resource.name as string,
+            url: resource.url as string,
+          })),
         })),
-      })),
+        (procedure) => procedure.name
+      ),
       sections,
       toggleSections: rawToggleSections.map((section) => ({
         id: section.id,
@@ -717,7 +727,12 @@ export class InstructorDashboardService {
       throw new BadRequestException(studentProcedureError.message);
     }
 
-    return { success: true };
+    return {
+      success: true,
+      overallScore: score,
+      maxScore: 100,
+      competencyStatus,
+    };
   }
 
   private async requireInstructor(accessToken: string) {

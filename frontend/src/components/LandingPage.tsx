@@ -103,7 +103,7 @@ export function LandingPage() {
             <h2 className="text-4xl font-bold text-foreground mb-4">
               Your Clinical Rotation Companion
             </h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto text-justify">
               Keep track of your procedures, access learning resources, and get feedback from your
               instructors all in one place.
             </p>
@@ -143,7 +143,7 @@ export function LandingPage() {
                 onMouseLeave={(e) => (e.currentTarget.style.borderColor = '')}
               >
                 <h3 className="text-2xl font-bold text-foreground mb-3">{feature.title}</h3>
-                <p className="text-muted-foreground">{feature.description}</p>
+                <p className="text-muted-foreground text-justify">{feature.description}</p>
               </motion.div>
             ))}
           </div>

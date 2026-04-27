@@ -151,9 +151,13 @@ export class AuthService {
     const fullName = `${dto.firstName} ${dto.lastName}`.trim();
     // Fire-and-forget — email failure must NOT block account creation.
     // The admin can still see and approve the account via the dashboard.
+    const adminEmail =
+      this.config.get<string>('ADMIN_EMAIL')?.trim() ||
+      'dapla.lmje@shc.edu.ph';
+
     this.email
       .sendEmail(
-        this.config.get<string>('ADMIN_EMAIL')!,
+        adminEmail,
         `New registration request - ${fullName}`,
         signupPendingAdminEmail({
           userName: fullName,

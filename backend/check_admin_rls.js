@@ -11,7 +11,7 @@ const supabase = createClient(supabaseUrl, supabaseKey)
 async function check() {
   console.log('Logging in as admin...')
   const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: 'admin@maternixtrack.edu', // Default seeded admin email
+    email: 'dapla.lmje@shc.edu.ph', // Seeded admin email
     password: 'password123',
   })
   if (authError) {

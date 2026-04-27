@@ -23,6 +23,7 @@ import { AnnouncementPopup } from './AnnouncementPopup';
 import { createClient } from '@/lib/supabase/client';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { UserAvatar } from './UserAvatar';
+import { sortProceduresByName } from '@/lib/procedure-order';
 
 type EvaluationData = {
   overallScore: number | null;
@@ -110,25 +111,7 @@ export function StudentDashboard() {
   ]);
 
   const orderedProcedures = useMemo(() => {
-    return [...procedures].sort((a, b) => {
-      const getStatusRank = (status: Procedure['status']) => {
-        switch (status) {
-          case 'evaluated':
-            return 0;
-          case 'pending':
-          case 'in_progress':
-            return 1;
-          case 'completed':
-            return 2;
-          case 'locked':
-            return 3;
-          default:
-            return 4;
-        }
-      };
-
-      return getStatusRank(a.status) - getStatusRank(b.status);
-    });
+    return sortProceduresByName(procedures, (procedure) => procedure.name);
   }, [procedures]);
 
   const getVisibleNote = (procedure: Procedure | null) => {

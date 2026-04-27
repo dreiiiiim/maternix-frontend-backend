@@ -6,6 +6,7 @@ import { ArrowLeft, Edit2, Lock, Send, Unlock } from 'lucide-react'
 import { StudentEvaluationForm } from './StudentEvaluationForm'
 import { createClient } from '@/lib/supabase/client'
 import { getApiBaseUrl } from '@/lib/api-base-url'
+import { sortProceduresByName } from '@/lib/procedure-order'
 
 type Procedure = {
   id: string
@@ -53,7 +54,11 @@ type EvaluationRecord = {
   id: string
   student_id: string
   procedure_id: string
+  overall_score: number | null
+  max_score: number | null
+  competency_status: string | null
   feedback: string | null
+  evaluation_date: string | null
   profiles?: { first_name: string; last_name: string }
 }
 
@@ -176,9 +181,33 @@ export function ProcedureManagement() {
     () => new Set(sectionAccessRows.map((row) => `${row.procedureId}:${row.sectionId}`)),
     [sectionAccessRows]
   )
+  const orderedProcedures = useMemo(
+    () => sortProceduresByName(procedures, (procedure) => procedure.name),
+    [procedures]
+  )
+  const gradeFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      }),
+    []
+  )
 
   const isProcedureEnabledForSection = (procedureId: string, sectionId: string) =>
     sectionAccessLookup.has(`${procedureId}:${sectionId}`)
+
+  const formatGrade = (value: number | null | undefined) =>
+    value === null || value === undefined ? 'N/A' : gradeFormatter.format(Number(value))
+
+  const formatEvaluationDate = (value: string | null | undefined) =>
+    value
+      ? new Date(value).toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      : null
 
   const toggleSectionAccess = async (procedureId: string, sectionId: string) => {
     const section = toggleSections.find((s) => s.id === sectionId)
@@ -310,10 +339,11 @@ export function ProcedureManagement() {
   }
 
   const saveEvaluation = async (payload: unknown) => {
-    if (!selectedStudent) return
+    if (!selectedStudent) return false
     const data = (payload ?? {}) as EvaluationPayload
 
     setSaving(true)
+    setError('')
 
     const {
       data: { session },
@@ -322,7 +352,7 @@ export function ProcedureManagement() {
     if (!session?.access_token) {
       setError('You must be logged in to save an evaluation.')
       setSaving(false)
-      return
+      return false
     }
 
     const response = await fetch(`${apiUrl}/instructor/dashboard/evaluations`, {
@@ -342,11 +372,13 @@ export function ProcedureManagement() {
     const responsePayload = await response.json().catch(() => null)
     if (!response.ok) {
       setError(responsePayload?.message ?? 'Failed to save evaluation.')
+      setSaving(false)
+      return false
     }
 
-    setSelectedStudent(null)
     await fetchData()
     setSaving(false)
+    return true
   }
 
   const saveNote = async () => {
@@ -528,6 +560,25 @@ export function ProcedureManagement() {
                               Note: {row.notes}
                             </div>
                           )}
+                          {row.status === 'evaluated' && evaluation && (
+                            <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
+                              <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-foreground">
+                                Final Grade:{' '}
+                                <b>
+                                  {formatGrade(evaluation.overall_score)} /{' '}
+                                  {formatGrade(evaluation.max_score ?? 100)}
+                                </b>
+                              </div>
+                              <div className="rounded-lg border border-border bg-gray-50 px-3 py-2 text-foreground">
+                                Result: <b>{evaluation.competency_status ?? 'Pending'}</b>
+                                {formatEvaluationDate(evaluation.evaluation_date) && (
+                                  <span className="ml-2 text-muted-foreground">
+                                    ({formatEvaluationDate(evaluation.evaluation_date)})
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                           <div className="mt-2 flex gap-2">
                             {row.status !== 'evaluated' && (
                               <button
@@ -573,7 +624,7 @@ export function ProcedureManagement() {
           </div>
 
           <div className="space-y-3">
-            {procedures.map((procedure) => {
+            {orderedProcedures.map((procedure) => {
               return (
                 <div key={procedure.id} className="bg-white border rounded-xl p-4">
                   <div className="flex items-start justify-between">
