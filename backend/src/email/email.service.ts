@@ -25,24 +25,26 @@ export class EmailService {
   }
 
   async sendEmail(
-    to: string,
+    to: string | string[],
     subject: string,
     html: string,
     template: string,
     text?: string
   ) {
     const db = this.supabase.getServiceClient()
+    const recipients = this.normalizeRecipients(to)
+    const recipientsForLog = recipients.join(', ')
 
     try {
-      await this.sendViaBrevo({ to, subject, html, text })
+      await this.sendViaBrevo({ to: recipients, subject, html, text })
 
       await db
         .from('email_logs')
-        .insert({ to_email: to, subject, template, status: 'sent' })
+        .insert({ to_email: recipientsForLog, subject, template, status: 'sent' })
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err)
       await db.from('email_logs').insert({
-        to_email: to,
+        to_email: recipientsForLog,
         subject,
         template,
         status: 'failed',
@@ -52,7 +54,21 @@ export class EmailService {
     }
   }
 
-  private async sendViaBrevo(payload: { to: string; subject: string; html: string; text?: string }) {
+  private normalizeRecipients(to: string | string[]) {
+    const values = Array.isArray(to) ? to : [to]
+    const recipients = values
+      .flatMap((value) => value.split(','))
+      .map((value) => value.trim())
+      .filter(Boolean)
+
+    if (!recipients.length) {
+      throw new Error('No recipient email provided.')
+    }
+
+    return recipients
+  }
+
+  private async sendViaBrevo(payload: { to: string[]; subject: string; html: string; text?: string }) {
     if (!this.brevoApiKey) {
       throw new Error('Brevo API key is not configured. Set BREVO_API_KEY.')
     }
@@ -73,7 +89,7 @@ export class EmailService {
             email: this.senderEmail,
             name: this.senderName,
           },
-          to: [{ email: payload.to }],
+          to: payload.to.map((email) => ({ email })),
           subject: payload.subject,
           htmlContent: payload.html,
           textContent: payload.text,
